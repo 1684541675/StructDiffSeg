@@ -1,0 +1,89 @@
+2026-01-20 15:35:29 - #----------Config info----------#
+2026-01-20 15:35:29 - network: vmunet,
+2026-01-20 15:35:29 - model_config: {'num_classes': 4, 'input_channels': 1, 'depths': [2, 2, 2, 2], 'depths_decoder': [2, 2, 2, 1], 'drop_path_rate': 0.2, 'load_ckpt_path': './pre_trained_weights/vmamba_small_e238_ema.pth'},
+2026-01-20 15:35:29 - datasets_name: acdc,
+2026-01-20 15:35:29 - input_size_h: 256,
+2026-01-20 15:35:29 - input_size_w: 256,
+2026-01-20 15:35:29 - data_path: ../Synapse/train_npz/,
+2026-01-20 15:35:29 - datasets: <class 'datasets.dataset.Synapse_dataset'>,
+2026-01-20 15:35:29 - list_dir: ../Synapse/lists/lists_Synapse/,
+2026-01-20 15:35:29 - volume_path: ../Synapse/test_vol_h5/,
+2026-01-20 15:35:29 - pretrained_path: ,
+2026-01-20 15:35:29 - num_classes: 4,
+2026-01-20 15:35:29 - loss_weight: [1, 1],
+2026-01-20 15:35:29 - criterion: CeDiceLoss(
+  (celoss): CrossEntropyLoss()
+  (diceloss): nDiceLoss()
+),
+2026-01-20 15:35:29 - z_spacing: 1,
+2026-01-20 15:35:29 - input_channels: 1,
+2026-01-20 15:35:29 - distributed: False,
+2026-01-20 15:35:29 - local_rank: -1,
+2026-01-20 15:35:29 - num_workers: 0,
+2026-01-20 15:35:29 - seed: 42,
+2026-01-20 15:35:29 - world_size: None,
+2026-01-20 15:35:29 - rank: None,
+2026-01-20 15:35:29 - amp: False,
+2026-01-20 15:35:29 - batch_size: 16,
+2026-01-20 15:35:29 - epochs: 100,
+2026-01-20 15:35:29 - work_dir: results/vmunet_acdc_Tuesday_20_January_2026_15h_35m_29s/,
+2026-01-20 15:35:29 - print_interval: 10,
+2026-01-20 15:35:29 - val_interval: 1,
+2026-01-20 15:35:29 - threshold: 0.5,
+2026-01-20 15:35:29 - only_test_and_save_figs: True,
+2026-01-20 15:35:29 - best_ckpt_path: results/acdc1-diffspm/checkpoints/best.pth,
+2026-01-20 15:35:29 - img_save_path: imagesacdc,
+2026-01-20 15:35:29 - opt: AdamW,
+2026-01-20 15:35:29 - lr: 0.001,
+2026-01-20 15:35:29 - betas: (0.9, 0.999),
+2026-01-20 15:35:29 - eps: 1e-08,
+2026-01-20 15:35:29 - weight_decay: 0.01,
+2026-01-20 15:35:29 - amsgrad: False,
+2026-01-20 15:35:29 - sch: CosineAnnealingLR,
+2026-01-20 15:35:29 - T_max: 100,
+2026-01-20 15:35:29 - eta_min: 1e-05,
+2026-01-20 15:35:29 - last_epoch: -1,
+2026-01-20 15:35:31 - idx 0 case patient072_frame01 mean_dice 0.953876 mean_hd95 1.000000
+2026-01-20 15:35:32 - idx 1 case patient072_frame11 mean_dice 0.940054 mean_hd95 1.000000
+2026-01-20 15:35:34 - idx 2 case patient081_frame01 mean_dice 0.918984 mean_hd95 1.333333
+2026-01-20 15:35:36 - idx 3 case patient081_frame07 mean_dice 0.903290 mean_hd95 1.483163
+2026-01-20 15:35:37 - idx 4 case patient019_frame01 mean_dice 0.959707 mean_hd95 1.000000
+2026-01-20 15:35:39 - idx 5 case patient019_frame11 mean_dice 0.959795 mean_hd95 1.000000
+2026-01-20 15:35:40 - idx 6 case patient027_frame01 mean_dice 0.876910 mean_hd95 1.138071
+2026-01-20 15:35:41 - idx 7 case patient027_frame11 mean_dice 0.842206 mean_hd95 2.615713
+2026-01-20 15:35:42 - idx 8 case patient056_frame01 mean_dice 0.947845 mean_hd95 1.000000
+2026-01-20 15:35:44 - idx 9 case patient056_frame12 mean_dice 0.911578 mean_hd95 1.000000
+2026-01-20 15:35:45 - idx 10 case patient052_frame01 mean_dice 0.903021 mean_hd95 1.000000
+2026-01-20 15:35:45 - idx 11 case patient052_frame09 mean_dice 0.839168 mean_hd95 1.483163
+2026-01-20 15:35:47 - idx 12 case patient028_frame01 mean_dice 0.929724 mean_hd95 1.000000
+2026-01-20 15:35:48 - idx 13 case patient028_frame09 mean_dice 0.879008 mean_hd95 1.244017
+2026-01-20 15:35:50 - idx 14 case patient099_frame01 mean_dice 0.950622 mean_hd95 1.000000
+2026-01-20 15:35:52 - idx 15 case patient099_frame09 mean_dice 0.925658 mean_hd95 1.000000
+2026-01-20 15:35:53 - idx 16 case patient007_frame01 mean_dice 0.947413 mean_hd95 1.000000
+2026-01-20 15:35:54 - idx 17 case patient007_frame07 mean_dice 0.925228 mean_hd95 1.000000
+2026-01-20 15:35:55 - idx 18 case patient076_frame01 mean_dice 0.949984 mean_hd95 1.000000
+2026-01-20 15:35:56 - idx 19 case patient076_frame12 mean_dice 0.940150 mean_hd95 1.000000
+2026-01-20 15:35:58 - idx 20 case patient084_frame01 mean_dice 0.845937 mean_hd95 2.041035
+2026-01-20 15:35:59 - idx 21 case patient084_frame10 mean_dice 0.817183 mean_hd95 1.804738
+2026-01-20 15:36:01 - idx 22 case patient008_frame01 mean_dice 0.942048 mean_hd95 1.000000
+2026-01-20 15:36:02 - idx 23 case patient008_frame13 mean_dice 0.917140 mean_hd95 1.000000
+2026-01-20 15:36:04 - idx 24 case patient085_frame01 mean_dice 0.922739 mean_hd95 1.000000
+2026-01-20 15:36:06 - idx 25 case patient085_frame09 mean_dice 0.904433 mean_hd95 1.333333
+2026-01-20 15:36:07 - idx 26 case patient021_frame13 mean_dice 0.820888 mean_hd95 1.412023
+2026-01-20 15:36:08 - idx 27 case patient021_frame01 mean_dice 0.943645 mean_hd95 1.000000
+2026-01-20 15:36:09 - idx 28 case patient054_frame01 mean_dice 0.879140 mean_hd95 2.333333
+2026-01-20 15:36:10 - idx 29 case patient054_frame12 mean_dice 0.798983 mean_hd95 2.721471
+2026-01-20 15:36:11 - idx 30 case patient026_frame01 mean_dice 0.926220 mean_hd95 1.000000
+2026-01-20 15:36:13 - idx 31 case patient026_frame12 mean_dice 0.866804 mean_hd95 1.688165
+2026-01-20 15:36:14 - idx 32 case patient059_frame01 mean_dice 0.965351 mean_hd95 1.000000
+2026-01-20 15:36:15 - idx 33 case patient059_frame09 mean_dice 0.926611 mean_hd95 1.000000
+2026-01-20 15:36:16 - idx 34 case patient073_frame01 mean_dice 0.940277 mean_hd95 1.000000
+2026-01-20 15:36:17 - idx 35 case patient073_frame10 mean_dice 0.903569 mean_hd95 1.138071
+2026-01-20 15:36:18 - idx 36 case patient029_frame01 mean_dice 0.935821 mean_hd95 1.000000
+2026-01-20 15:36:19 - idx 37 case patient029_frame12 mean_dice 0.791184 mean_hd95 2.385290
+2026-01-20 15:36:20 - idx 38 case patient068_frame01 mean_dice 0.927655 mean_hd95 1.000000
+2026-01-20 15:36:21 - idx 39 case patient068_frame12 mean_dice 0.926719 mean_hd95 1.000000
+2026-01-20 15:36:21 - Mean class 1 mean_dice 0.878783 mean_hd95 1.717561
+2026-01-20 15:36:21 - Mean class 2 mean_dice 0.899139 mean_hd95 1.035355
+2026-01-20 15:36:21 - Mean class 3 mean_dice 0.945071 mean_hd95 1.083703
+2026-01-20 15:36:21 - val epoch: 1, mean_dice: 0.9076642023333698, mean_hd95: 1.278873020863478, time(s): 51.54

@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+
+# model weights
+*.pth
+*.pt
+*.ckpt
+
+# medical image outputs
+*.nii
+*.nii.gz
+
+# generated outputs
+imagesacdcoutputs/
+
+# editor / system
+.vscode/
+.idea/
+.DS_Store

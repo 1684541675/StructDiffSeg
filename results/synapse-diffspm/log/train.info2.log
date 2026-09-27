@@ -1,0 +1,113 @@
+2026-01-14 17:37:05 - #----------Config info----------#
+2026-01-14 17:37:05 - network: vmunet,
+2026-01-14 17:37:05 - model_config: {'num_classes': 9, 'input_channels': 1, 'depths': [2, 2, 2, 2], 'depths_decoder': [2, 2, 2, 1], 'drop_path_rate': 0.2, 'load_ckpt_path': './pre_trained_weights/vmamba_small_e238_ema.pth'},
+2026-01-14 17:37:05 - datasets_name: synapse,
+2026-01-14 17:37:05 - input_size_h: 256,
+2026-01-14 17:37:05 - input_size_w: 256,
+2026-01-14 17:37:05 - data_path: ../Synapse/train_npz/,
+2026-01-14 17:37:05 - val_path: ../Synapse/test_vol_2d_slices/,
+2026-01-14 17:37:05 - datasets: <class 'datasets.dataset.Synapse_dataset'>,
+2026-01-14 17:37:05 - list_dir: ../Synapse/lists/lists_Synapse/,
+2026-01-14 17:37:05 - volume_path: ../Synapse/test_vol_h5/,
+2026-01-14 17:37:05 - pretrained_path: ,
+2026-01-14 17:37:05 - num_classes: 9,
+2026-01-14 17:37:05 - loss_weight: [1, 1],
+2026-01-14 17:37:05 - criterion: CeDiceLoss(
+  (celoss): CrossEntropyLoss()
+  (diceloss): nDiceLoss()
+),
+2026-01-14 17:37:05 - z_spacing: 1,
+2026-01-14 17:37:05 - input_channels: 1,
+2026-01-14 17:37:05 - distributed: False,
+2026-01-14 17:37:05 - local_rank: -1,
+2026-01-14 17:37:05 - num_workers: 0,
+2026-01-14 17:37:05 - seed: 42,
+2026-01-14 17:37:05 - world_size: None,
+2026-01-14 17:37:05 - rank: None,
+2026-01-14 17:37:05 - amp: False,
+2026-01-14 17:37:05 - batch_size: 16,
+2026-01-14 17:37:05 - epochs: 100,
+2026-01-14 17:37:05 - work_dir: results/synapse1/,
+2026-01-14 17:37:05 - print_interval: 10,
+2026-01-14 17:37:05 - val_interval: 1,
+2026-01-14 17:37:05 - threshold: 0.5,
+2026-01-14 17:37:05 - only_test_and_save_figs: True,
+2026-01-14 17:37:05 - best_ckpt_path: results/synapse1/checkpoints/latest.pth,
+2026-01-14 17:37:05 - img_save_path: imagessynapse,
+2026-01-14 17:37:05 - opt: AdamW,
+2026-01-14 17:37:05 - lr: 0.001,
+2026-01-14 17:37:05 - betas: (0.9, 0.999),
+2026-01-14 17:37:05 - eps: 1e-08,
+2026-01-14 17:37:05 - weight_decay: 0.01,
+2026-01-14 17:37:05 - amsgrad: False,
+2026-01-14 17:37:05 - sch: CosineAnnealingLR,
+2026-01-14 17:37:05 - T_max: 100,
+2026-01-14 17:37:05 - eta_min: 1e-05,
+2026-01-14 17:37:05 - last_epoch: -1,
+2026-01-14 17:37:52 - #----------Config info----------#
+2026-01-14 17:37:52 - network: vmunet,
+2026-01-14 17:37:52 - model_config: {'num_classes': 9, 'input_channels': 1, 'depths': [2, 2, 2, 2], 'depths_decoder': [2, 2, 2, 1], 'drop_path_rate': 0.2, 'load_ckpt_path': './pre_trained_weights/vmamba_small_e238_ema.pth'},
+2026-01-14 17:37:52 - datasets_name: synapse,
+2026-01-14 17:37:52 - input_size_h: 256,
+2026-01-14 17:37:52 - input_size_w: 256,
+2026-01-14 17:37:52 - data_path: ../Synapse/train_npz/,
+2026-01-14 17:37:52 - val_path: ../Synapse/test_vol_2d_slices/,
+2026-01-14 17:37:52 - datasets: <class 'datasets.dataset.Synapse_dataset'>,
+2026-01-14 17:37:52 - list_dir: ../Synapse/lists/lists_Synapse/,
+2026-01-14 17:37:52 - volume_path: ../Synapse/test_vol_h5/,
+2026-01-14 17:37:52 - pretrained_path: ,
+2026-01-14 17:37:52 - num_classes: 9,
+2026-01-14 17:37:52 - loss_weight: [1, 1],
+2026-01-14 17:37:52 - criterion: CeDiceLoss(
+  (celoss): CrossEntropyLoss()
+  (diceloss): nDiceLoss()
+),
+2026-01-14 17:37:52 - z_spacing: 1,
+2026-01-14 17:37:52 - input_channels: 1,
+2026-01-14 17:37:52 - distributed: False,
+2026-01-14 17:37:52 - local_rank: -1,
+2026-01-14 17:37:52 - num_workers: 0,
+2026-01-14 17:37:52 - seed: 42,
+2026-01-14 17:37:52 - world_size: None,
+2026-01-14 17:37:52 - rank: None,
+2026-01-14 17:37:52 - amp: False,
+2026-01-14 17:37:52 - batch_size: 16,
+2026-01-14 17:37:52 - epochs: 100,
+2026-01-14 17:37:52 - work_dir: results/synapse1/,
+2026-01-14 17:37:52 - print_interval: 10,
+2026-01-14 17:37:52 - val_interval: 1,
+2026-01-14 17:37:52 - threshold: 0.5,
+2026-01-14 17:37:52 - only_test_and_save_figs: True,
+2026-01-14 17:37:52 - best_ckpt_path: results/synapse1/checkpoints/latest.pth,
+2026-01-14 17:37:52 - img_save_path: imagessynapse,
+2026-01-14 17:37:52 - opt: AdamW,
+2026-01-14 17:37:52 - lr: 0.001,
+2026-01-14 17:37:52 - betas: (0.9, 0.999),
+2026-01-14 17:37:52 - eps: 1e-08,
+2026-01-14 17:37:52 - weight_decay: 0.01,
+2026-01-14 17:37:52 - amsgrad: False,
+2026-01-14 17:37:52 - sch: CosineAnnealingLR,
+2026-01-14 17:37:52 - T_max: 100,
+2026-01-14 17:37:52 - eta_min: 1e-05,
+2026-01-14 17:37:52 - last_epoch: -1,
+2026-01-14 17:40:16 - idx 0 case case0008 mean_dice 0.667423 mean_hd95 14.469715
+2026-01-14 17:41:41 - idx 1 case case0022 mean_dice 0.847432 mean_hd95 41.615118
+2026-01-14 17:43:11 - idx 2 case case0038 mean_dice 0.752975 mean_hd95 13.753321
+2026-01-14 17:46:15 - idx 3 case case0036 mean_dice 0.796318 mean_hd95 12.597563
+2026-01-14 17:48:33 - idx 4 case case0032 mean_dice 0.849346 mean_hd95 23.924446
+2026-01-14 17:50:45 - idx 5 case case0002 mean_dice 0.801510 mean_hd95 43.577451
+2026-01-14 17:52:17 - idx 6 case case0029 mean_dice 0.745755 mean_hd95 53.223390
+2026-01-14 17:55:26 - idx 7 case case0003 mean_dice 0.560455 mean_hd95 97.044037
+2026-01-14 17:57:46 - idx 8 case case0001 mean_dice 0.734503 mean_hd95 17.866391
+2026-01-14 17:59:58 - idx 9 case case0004 mean_dice 0.759385 mean_hd95 26.355957
+2026-01-14 18:01:18 - idx 10 case case0025 mean_dice 0.769027 mean_hd95 20.784314
+2026-01-14 18:02:36 - idx 11 case case0035 mean_dice 0.880944 mean_hd95 3.546761
+2026-01-14 18:02:36 - Mean class 1 mean_dice 0.887642 mean_hd95 7.827358
+2026-01-14 18:02:36 - Mean class 2 mean_dice 0.612358 mean_hd95 28.637259
+2026-01-14 18:02:36 - Mean class 3 mean_dice 0.773729 mean_hd95 65.456775
+2026-01-14 18:02:36 - Mean class 4 mean_dice 0.688736 mean_hd95 53.567334
+2026-01-14 18:02:36 - Mean class 5 mean_dice 0.943809 mean_hd95 21.956559
+2026-01-14 18:02:36 - Mean class 6 mean_dice 0.608401 mean_hd95 12.468320
+2026-01-14 18:02:36 - Mean class 7 mean_dice 0.895852 mean_hd95 35.491398
+2026-01-14 18:02:36 - Mean class 8 mean_dice 0.699521 mean_hd95 20.433972
+2026-01-14 18:02:36 - val epoch: 1, mean_dice: 0.763755996064329, mean_hd95: 30.72987200613819, time(s): 1482.48
