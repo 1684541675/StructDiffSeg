@@ -90,7 +90,15 @@ class UNet(torch.nn.Module):
 
 
 def main(config):
+    local_debug = os.getenv("LOCAL_DEBUG", "0") == "1"
 
+    if local_debug:
+        print("⚠️ LOCAL_DEBUG 模式：MX350 本地调试")
+        config.batch_size = 1
+        config.num_workers = 0
+        config.epochs = 1
+   
+    
     print('#----------Creating logger----------#')
     sys.path.append(config.work_dir + '/')
     log_dir = os.path.join(config.work_dir, 'log')

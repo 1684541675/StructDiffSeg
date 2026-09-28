@@ -120,6 +120,16 @@ class Synapse_dataset(Dataset):
         # ============================================================
 
         '''
+        if os.getenv("LOCAL_DEBUG", "0") == "1":
+            if self.split == "train" or self.split == "val_vol_2d":
+                self.sample_list = self.sample_list[:20]
+            else:
+                self.sample_list = self.sample_list[:1]
+
+            print(
+                f"⚠️ LOCAL_DEBUG：{self.split} 当前仅使用 "
+                f"{len(self.sample_list)} 个样本"
+            )
         
         self.data_dir = base_dir
 

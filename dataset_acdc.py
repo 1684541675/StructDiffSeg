@@ -51,21 +51,15 @@ class BaseDataSets(Dataset):
         #     self.sample_list = self.sample_list[:num]
         # ================== 新增代码：小数据调试模式 ==================
         
-        '''
-        if self.split == "train":
-            # 比如只取前 100 张切片来训练 (原量是2000+)
-            self.sample_list = self.sample_list[:100] 
-            print(f"⚠️ 调试模式开启：仅使用 {len(self.sample_list)} 张切片进行训练！")
-            
-        else:
-            # 测试集本来就只有12个，可以不改，或者只取前2个测测速度
-            self.sample_list = self.sample_list[:1]
-            print(f"⚠️ 调试模式开启：仅使用 {len(self.sample_list)} 个病例进行测试！")
-        # ============================================================
+        # 本地调试模式：PowerShell 设置 $env:LOCAL_DEBUG="1" 后启用
+        if os.getenv("LOCAL_DEBUG", "0") == "1":
+            if self.split.find("train") != -1:
+                self.sample_list = self.sample_list[:20]
+            else:
+                self.sample_list = self.sample_list[:1]
 
-        print("total {} samples".format(len(self.sample_list)))
-        '''
-        
+            print(f"⚠️ LOCAL_DEBUG：当前仅使用 {len(self.sample_list)} 个样本")
+                
 
     def _get_ids(self):
         # 1. 生成所有 1-100 的 ID
