@@ -17,3 +17,6 @@ imagesacdcoutputs/
 .vscode/
 .idea/
 .DS_Store
+
+# local smoke-test outputs
+results/vmunet_*/
