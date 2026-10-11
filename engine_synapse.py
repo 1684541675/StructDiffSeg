@@ -11,6 +11,8 @@ from scipy.ndimage.morphology import binary_fill_holes, binary_opening
 from utils import test_single_volume
 
 import time
+import json
+import os
 
 def func(m, epochs):
     return np.exp(-10*(1- m / epochs)**2)
@@ -224,13 +226,27 @@ def val_one_epoch(test_datasets,
     # switch to evaluate mode
     stime = time.time()
     model.eval()
+    debug_trajectory = val_or_test and os.getenv('ACDC_TRAJECTORY_DEBUG', '0') == '1'
     with torch.no_grad():
         metric_list = 0.0
         i_batch = 0
         for data in tqdm(test_loader):
             img, msk, case_name = data['image'], data['label'], data['case_name'][0]
             metric_i = test_single_volume(img, msk, model, classes=config.num_classes, patch_size=[config.input_size_h, config.input_size_w],
-                                    test_save_path=test_save_path, case=case_name, z_spacing=config.z_spacing, val_or_test=val_or_test)
+                                    test_save_path=test_save_path, case=case_name, z_spacing=config.z_spacing,
+                                    val_or_test=val_or_test, debug_trajectory=debug_trajectory)
+            if debug_trajectory:
+                metric_i, trajectory = metric_i
+                trajectory['epoch'] = epoch
+                trajectory['existing_final_dice'] = dict(zip(('RV', 'Myo', 'LV'),
+                                                            [float(row[0]) for row in metric_i]))
+                trajectory['existing_final_dice']['mean'] = float(np.mean(metric_i, axis=0)[0])
+                trajectory['existing_final_hd95'] = dict(zip(('RV', 'Myo', 'LV'),
+                                                            [float(row[1]) for row in metric_i]))
+                logger.info('ACDC trajectory %s', json.dumps(trajectory, ensure_ascii=False))
+                print('ACDC trajectory', json.dumps(trajectory, ensure_ascii=False))
+                with open(os.path.join(test_save_path, 'trajectory_debug.jsonl'), 'a', encoding='utf-8') as record:
+                    record.write(json.dumps(trajectory, ensure_ascii=False) + '\n')
             metric_list += np.array(metric_i)
 
             logger.info('idx %d case %s mean_dice %f mean_hd95 %f' % (i_batch, case_name,

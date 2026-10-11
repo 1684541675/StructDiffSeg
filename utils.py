@@ -506,10 +506,102 @@ def calculate_metric_percase(pred, gt):
 
 
 def test_single_volume(image, label, net, classes, patch_size=[256, 256], 
-                    test_save_path=None, case=None, z_spacing=1, val_or_test=False):
+                    test_save_path=None, case=None, z_spacing=1, val_or_test=False,
+                    debug_trajectory=False, ablation_mode=None, audit_seed=None,
+                    condition_mode=None, branch_audit=False, spm_scale=1.0,
+                    correction_oracle=False, disagreement_utility=False):
+    if spm_scale != 1.0 and not branch_audit:
+        raise ValueError("SPM scale evaluation requires branch_audit=True")
     image, label = image.squeeze(0).cpu().detach().numpy(), label.squeeze(0).cpu().detach().numpy()
+    if correction_oracle:
+        if (image.ndim != 3 or classes != 4 or branch_audit or debug_trajectory
+                or ablation_mode is not None or condition_mode not in (None, 'normal')
+                or spm_scale != 1.0 or val_or_test):
+            raise ValueError("Correction oracle requires normal ACDC validation inference only")
+        from correction_oracle_audit import CorrectionOracleCase
+        oracle_case = CorrectionOracleCase(label, case)
+    if disagreement_utility:
+        if (image.ndim != 3 or classes != 4 or branch_audit or debug_trajectory
+                or correction_oracle or ablation_mode is not None
+                or condition_mode not in (None, 'normal') or spm_scale != 1.0 or val_or_test):
+            raise ValueError("Disagreement utility requires normal ACDC validation inference only")
+        from disagreement_utility_audit import DisagreementUtilityCase
+        oracle_case = DisagreementUtilityCase(label, case)
+    if branch_audit:
+        if image.ndim != 3 or debug_trajectory or ablation_mode is not None:
+            raise ValueError("Branch audit requires an ACDC volume without other debug/ablation modes")
+        logit_stats = {branch: {'count': 0, 'abs_sum': 0.0, 'mean': 0.0, 'm2': 0.0}
+                       for branch in ('spm', 'diffusion', 'final')}
+    if debug_trajectory and image.ndim != 3:
+        raise ValueError("Trajectory debugging expects an ACDC volume [slices, height, width]")
+    if ablation_mode is not None and image.ndim != 3:
+        raise ValueError("DDIM ablation expects an ACDC volume [slices, height, width]")
+    if condition_mode is not None and image.ndim != 3:
+        raise ValueError("Image condition audit expects an ACDC volume [slices, height, width]")
+    if debug_trajectory:
+        # Count voxels per class across the volume; keep only one slice of logits on GPU.
+        gt_counts = np.array([np.count_nonzero(label == c) for c in range(1, classes)])
+        step_counts = step_intersections = None
+        diffusion_counts = np.zeros(classes - 1, dtype=np.int64)
+        diffusion_intersections = np.zeros(classes - 1, dtype=np.int64)
+        spm_counts = np.zeros(classes - 1, dtype=np.int64)
+        spm_intersections = np.zeros(classes - 1, dtype=np.int64)
+        prior_shape = None
+        step_logits_shape = None
+        branch_counts = {name: np.zeros(classes - 1, dtype=np.int64)
+                         for name in ('spm', 'diffusion')}
+        confidence_sums = {name: np.zeros(classes - 1, dtype=np.float64)
+                           for name in branch_counts}
+        entropy_sums = {name: np.zeros(classes - 1, dtype=np.float64)
+                        for name in branch_counts}
+
+        def add_branch_stats(logits, branch):
+            probabilities = torch.softmax(logits.float(), dim=1)
+            entropy = -(probabilities * torch.log(probabilities + 1e-8)).sum(dim=1)
+            predicted = logits.argmax(dim=1)
+            for cls in range(1, classes):
+                region = predicted == cls
+                count = int(region.sum().item())
+                if count:
+                    branch_counts[branch][cls - 1] += count
+                    confidence_sums[branch][cls - 1] += probabilities[:, cls][region].sum().item()
+                    entropy_sums[branch][cls - 1] += entropy[region].sum().item()
+
+        def class_means(sums, branch):
+            return {name: (float(sums[branch][idx] / branch_counts[branch][idx])
+                           if branch_counts[branch][idx] else None)
+                    for idx, name in enumerate(('rv', 'myo', 'lv'))}
+
+        def class_differences(diffusion_values, spm_values):
+            return {name: (diffusion_values[name] - spm_values[name]
+                           if diffusion_values[name] is not None and spm_values[name] is not None
+                           else None)
+                    for name in ('rv', 'myo', 'lv')}
+
+        def add_counts(pred_map, target, counts, intersections):
+            for cls in range(1, classes):
+                selected = pred_map == cls
+                counts[cls - 1] += np.count_nonzero(selected)
+                intersections[cls - 1] += np.count_nonzero(selected & (target == cls))
+
+        def dice_record(counts, intersections):
+            denominator = counts + gt_counts
+            dice = np.divide(2 * intersections, denominator,
+                             out=np.ones(classes - 1, dtype=float), where=denominator != 0)
+            return dict(zip(('RV', 'Myo', 'LV', 'mean'),
+                            [float(x) for x in dice] + [float(dice.mean())]))
+
+        def pair_dice_record(counts_a, counts_b, intersections):
+            denominator = counts_a + counts_b
+            dice = np.divide(2 * intersections, denominator,
+                             out=np.ones(classes - 1, dtype=float), where=denominator != 0)
+            return dict(zip(('rv', 'myo', 'lv', 'mean'),
+                            [float(x) for x in dice] + [float(dice.mean())]))
     if len(image.shape) == 3:
         prediction = np.zeros_like(label)
+        if branch_audit:
+            branch_predictions = {'spm': np.zeros_like(label),
+                                  'diffusion': np.zeros_like(label), 'final': prediction}
         for ind in range(image.shape[0]):
             slice = image[ind, :, :]
             x, y = slice.shape[0], slice.shape[1]
@@ -518,7 +610,78 @@ def test_single_volume(image, label, net, classes, patch_size=[256, 256],
             input = torch.from_numpy(slice).unsqueeze(0).unsqueeze(0).float().cuda()
             net.eval()
             with torch.no_grad():
-                outputs = net(input,ddim=True)
+                if audit_seed is not None:
+                    torch.manual_seed(audit_seed + ind)
+                if correction_oracle or disagreement_utility:
+                    outputs = net(input, ddim=True, condition_mode='normal', return_branches=True)
+                elif branch_audit:
+                    outputs = net(input, ddim=True, condition_mode=condition_mode,
+                                  return_branches=True, spm_scale=spm_scale)
+                elif debug_trajectory:
+                    outputs = net(input, ddim=True, debug_trajectory=True)
+                elif ablation_mode is not None:
+                    outputs = net(input, ddim=True, ablation_mode=ablation_mode)
+                elif condition_mode is not None:
+                    outputs = net(input, ddim=True, condition_mode=condition_mode)
+                else:
+                    outputs = net(input,ddim=True)
+                if correction_oracle or disagreement_utility:
+                    oracle_case.add_slice(outputs['spm'], outputs['diffusion'], ind)
+                    del outputs
+                    continue
+                if branch_audit:
+                    for branch, logits in outputs.items():
+                        # Raw logits: merge per-slice moments on CPU in float64.
+                        values = logits.detach().cpu().numpy().astype(np.float64)
+                        count = values.size
+                        mean = float(values.mean())
+                        m2 = float(((values - mean) ** 2).sum())
+                        stats = logit_stats[branch]
+                        total_count = stats['count'] + count
+                        delta = mean - stats['mean']
+                        stats['m2'] += m2 + delta ** 2 * stats['count'] * count / total_count
+                        stats['mean'] += delta * count / total_count
+                        stats['count'] = total_count
+                        stats['abs_sum'] += float(np.abs(values).sum())
+                        out = torch.argmax(torch.softmax(logits, dim=1), dim=1).squeeze(0)
+                        out = out.cpu().detach().numpy()
+                        if x != patch_size[0] or y != patch_size[1]:
+                            out = zoom(out, (x / patch_size[0], y / patch_size[1]), order=0)
+                        branch_predictions[branch][ind] = out
+                    del outputs, logits, values
+                    continue
+                if debug_trajectory:
+                    add_branch_stats(outputs['spm_logits'], 'spm')
+                    add_branch_stats(outputs['diffusion_logits'], 'diffusion')
+                    steps = outputs['step_logits'].argmax(dim=2).squeeze(0).cpu().numpy()
+                    diffusion = outputs['diffusion_logits'].argmax(dim=1).squeeze(0).cpu().numpy()
+                    spm = outputs['spm_logits'].argmax(dim=1).squeeze(0).cpu().numpy()
+                    if step_counts is None:
+                        step_counts = np.zeros((len(steps), classes - 1), dtype=np.int64)
+                        step_intersections = np.zeros_like(step_counts)
+                        prev_intersections = np.zeros_like(step_counts)
+                        step_spm_intersections = np.zeros_like(step_counts)
+                        prior_shape = list(outputs['refined_shape_prior'].shape)
+                        step_logits_shape = list(outputs['step_logits'].shape)
+                    if x != patch_size[0] or y != patch_size[1]:
+                        spm = zoom(spm, (x / patch_size[0], y / patch_size[1]), order=0)
+                    previous_step_map = None
+                    for step_idx, step_map in enumerate(steps):
+                        if x != patch_size[0] or y != patch_size[1]:
+                            step_map = zoom(step_map, (x / patch_size[0], y / patch_size[1]), order=0)
+                        add_counts(step_map, label[ind], step_counts[step_idx], step_intersections[step_idx])
+                        for cls in range(1, classes):
+                            step_mask = step_map == cls
+                            step_spm_intersections[step_idx, cls - 1] += np.count_nonzero(step_mask & (spm == cls))
+                            if previous_step_map is not None:
+                                prev_intersections[step_idx, cls - 1] += np.count_nonzero(
+                                    step_mask & (previous_step_map == cls))
+                        previous_step_map = step_map
+                    if x != patch_size[0] or y != patch_size[1]:
+                        diffusion = zoom(diffusion, (x / patch_size[0], y / patch_size[1]), order=0)
+                    add_counts(diffusion, label[ind], diffusion_counts, diffusion_intersections)
+                    add_counts(spm, label[ind], spm_counts, spm_intersections)
+                    outputs = outputs['final_logits']
                 out = torch.argmax(torch.softmax(outputs, dim=1), dim=1).squeeze(0)
                 out = out.cpu().detach().numpy()
                 if x != patch_size[0] or y != patch_size[1]:
@@ -533,6 +696,19 @@ def test_single_volume(image, label, net, classes, patch_size=[256, 256],
         with torch.no_grad():
             out = torch.argmax(torch.softmax(net(input), dim=1), dim=1).squeeze(0)
             prediction = out.cpu().detach().numpy()
+    if correction_oracle or disagreement_utility:
+        return oracle_case.finalize()
+    if branch_audit:
+        results = {}
+        for branch, branch_prediction in branch_predictions.items():
+            stats = logit_stats[branch]
+            results[branch] = {
+                'metrics': [calculate_metric_percase(branch_prediction == cls, label == cls)
+                            for cls in range(1, classes)],
+                'logit_mean_abs': stats['abs_sum'] / stats['count'],
+                'logit_std': float(np.sqrt(max(stats['m2'] / stats['count'], 0.0))),
+            }
+        return results
     metric_list = []
     for i in range(1, classes):
         metric_list.append(calculate_metric_percase(prediction == i, label == i))
@@ -548,4 +724,36 @@ def test_single_volume(image, label, net, classes, patch_size=[256, 256],
         sitk.WriteImage(img_itk, test_save_path + '/'+ case + "_img.nii.gz")
         sitk.WriteImage(lab_itk, test_save_path + '/'+ case + "_gt.nii.gz")
         # cv2.imwrite(test_save_path + '/'+case + '.png', prediction*255)
+    if debug_trajectory:
+        spm_confidence = class_means(confidence_sums, 'spm')
+        diffusion_confidence = class_means(confidence_sums, 'diffusion')
+        spm_entropy = class_means(entropy_sums, 'spm')
+        diffusion_entropy = class_means(entropy_sums, 'diffusion')
+        final_counts = np.array([np.count_nonzero(prediction == c) for c in range(1, classes)])
+        final_intersections = np.array([np.count_nonzero((prediction == c) & (label == c))
+                                        for c in range(1, classes)])
+        details = {
+            'case': case,
+            'dice_empty_convention': 'both_absent=1, one_absent=0',
+            'refined_shape_prior_shape': prior_shape,
+            'step_logits_shape_per_slice': step_logits_shape,
+            'steps': [{'step': i + 1, **dice_record(step_counts[i], step_intersections[i])}
+                      for i in range(len(step_counts))],
+            'step_vs_prev': [None] + [pair_dice_record(step_counts[i], step_counts[i - 1],
+                                                      prev_intersections[i])
+                                        for i in range(1, len(step_counts))],
+            'step_vs_spm': [pair_dice_record(step_counts[i], spm_counts,
+                                             step_spm_intersections[i])
+                            for i in range(len(step_counts))],
+            'diffusion_weighted': dice_record(diffusion_counts, diffusion_intersections),
+            'spm_only': dice_record(spm_counts, spm_intersections),
+            'final_plus_spm': dice_record(final_counts, final_intersections),
+            'spm_class_confidence': spm_confidence,
+            'diffusion_class_confidence': diffusion_confidence,
+            'spm_class_entropy': spm_entropy,
+            'diffusion_class_entropy': diffusion_entropy,
+            'confidence_diff': class_differences(diffusion_confidence, spm_confidence),
+            'entropy_diff': class_differences(diffusion_entropy, spm_entropy),
+        }
+        return metric_list, details
     return metric_list

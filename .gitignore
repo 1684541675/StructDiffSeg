@@ -20,3 +20,7 @@ imagesacdcoutputs/
 
 # local smoke-test outputs
 results/vmunet_*/
+
+# audit experiment outputs
+results/*.log
+results/*.patch

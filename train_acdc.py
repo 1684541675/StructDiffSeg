@@ -21,14 +21,17 @@ from models.SPM5121.vit_seg_configs import get_r50_b16_config
 
 #from models.DiffUNetSPM7.diffunet.diffunet_model import DiffUNet
 
-#from models.DiffUNetSPM.diffunet.diffunet_model import DiffUNet 最优的
+from models.DiffUNetSPM.diffunet.diffunet_model import DiffUNet
+#最优的
 
 #from models.DiffUNet3201.diffunet.diffunet_model import DiffUNet
 
-from models.DiffSPM1.diffunet.diffunet_model import DiffUNet 
+#from models.DiffSPM1.diffunet.diffunet_model import DiffUNet
 
 import os
 import sys
+import json
+import time
 os.environ["CUDA_VISIBLE_DEVICES"] = "0" # "0, 1, 2, 3"
 
 from utils import *
@@ -91,8 +94,258 @@ class UNet(torch.nn.Module):
         return self.outc(x)
 
 
+def run_diffusion_dependence_audit(val_loader, model, config, outputs, logger):
+    modes = ('normal', 'zero_state', 'fresh_noise', 'shuffled_state', 'fixed_time')
+    output_path = os.path.join(outputs, 'diffusion_dependence_audit.jsonl')
+    expected_cases = None
+    model.eval()
+    with open(output_path, 'w', encoding='utf-8') as record, torch.no_grad():
+        for mode in modes:
+            set_seed(config.seed)
+            rows = []
+            case_names = []
+            total_inference_seconds = 0.0
+            for case_index, data in enumerate(val_loader):
+                case_name = data['case_name'][0]
+                case_names.append(case_name)
+                start = time.perf_counter()
+                metric_i = test_single_volume(
+                    data['image'], data['label'], model,
+                    classes=config.num_classes,
+                    patch_size=[config.input_size_h, config.input_size_w],
+                    test_save_path=outputs, case=case_name,
+                    z_spacing=config.z_spacing, val_or_test=False,
+                    ablation_mode=mode, audit_seed=config.seed + case_index * 100000,
+                )
+                case_seconds = time.perf_counter() - start
+                total_inference_seconds += case_seconds
+                metrics = np.asarray(metric_i, dtype=float)
+                rows.append({
+                    'case': case_name,
+                    'mode': mode,
+                    'rv_dice': float(metrics[0, 0]),
+                    'myo_dice': float(metrics[1, 0]),
+                    'lv_dice': float(metrics[2, 0]),
+                    'mean_dice': float(metrics[:, 0].mean()),
+                    'mean_hd95': float(metrics[:, 1].mean()),
+                    'case_inference_seconds': case_seconds,
+                })
+            if expected_cases is None:
+                expected_cases = case_names
+            elif case_names != expected_cases:
+                raise RuntimeError(f'Validation cases changed in ablation mode {mode}')
+            for row in rows:
+                row['mode_total_inference_seconds'] = total_inference_seconds
+                record.write(json.dumps(row, ensure_ascii=False) + '\n')
+            record.flush()
+            log_info = (f'ACDC diffusion audit: mode={mode}, cases={len(rows)}, '
+                        f'total_inference_seconds={total_inference_seconds:.2f}')
+            print(log_info)
+            logger.info(log_info)
+    print(f'ACDC diffusion audit output: {output_path}')
+    logger.info('ACDC diffusion audit output: %s', output_path)
+    return output_path
+
+
+def run_image_condition_dominance_audit(val_loader, model, config, outputs, logger):
+    modes = ('normal', 'zero_denoiser_image', 'shuffle_denoiser_image',
+             'zero_spm_condition')
+    output_path = os.path.join(outputs, 'image_condition_dominance_audit.jsonl')
+    expected_cases = None
+    model.eval()
+    with open(output_path, 'w', encoding='utf-8') as record, torch.no_grad():
+        for mode in modes:
+            set_seed(config.seed)
+            rows = []
+            case_names = []
+            total_inference_seconds = 0.0
+            for case_index, data in enumerate(val_loader):
+                case_name = data['case_name'][0]
+                case_names.append(case_name)
+                start = time.perf_counter()
+                metric_i = test_single_volume(
+                    data['image'], data['label'], model,
+                    classes=config.num_classes,
+                    patch_size=[config.input_size_h, config.input_size_w],
+                    test_save_path=outputs, case=case_name,
+                    z_spacing=config.z_spacing, val_or_test=False,
+                    condition_mode=mode, audit_seed=config.seed + case_index * 100000,
+                )
+                case_seconds = time.perf_counter() - start
+                total_inference_seconds += case_seconds
+                metrics = np.asarray(metric_i, dtype=float)
+                rows.append({
+                    'case': case_name,
+                    'mode': mode,
+                    'rv_dice': float(metrics[0, 0]),
+                    'myo_dice': float(metrics[1, 0]),
+                    'lv_dice': float(metrics[2, 0]),
+                    'mean_dice': float(metrics[:, 0].mean()),
+                    'mean_hd95': float(metrics[:, 1].mean()),
+                    'case_inference_seconds': case_seconds,
+                })
+            if expected_cases is None:
+                expected_cases = case_names
+            elif case_names != expected_cases:
+                raise RuntimeError(f'Validation cases changed in image condition mode {mode}')
+            for row in rows:
+                row['mode_total_inference_seconds'] = total_inference_seconds
+                record.write(json.dumps(row, ensure_ascii=False) + '\n')
+            record.flush()
+            log_info = (f'ACDC image condition audit: mode={mode}, cases={len(rows)}, '
+                        f'total_inference_seconds={total_inference_seconds:.2f}')
+            print(log_info)
+            logger.info(log_info)
+    print(f'ACDC image condition audit output: {output_path}')
+    logger.info('ACDC image condition audit output: %s', output_path)
+    return output_path
+
+
+def run_image_condition_branch_audit(val_loader, model, config, outputs, logger):
+    modes = ('normal', 'zero_denoiser_image', 'shuffle_denoiser_image',
+             'zero_spm_condition')
+    output_path = os.path.join(outputs, 'image_condition_branch_audit.jsonl')
+    expected_cases = None
+    model.eval()
+    with open(output_path, 'w', encoding='utf-8') as record, torch.no_grad():
+        for mode in modes:
+            set_seed(config.seed)
+            rows = []
+            case_names = []
+            total_inference_seconds = 0.0
+            for case_index, data in enumerate(val_loader):
+                case_name = data['case_name'][0]
+                case_names.append(case_name)
+                start = time.perf_counter()
+                branches = test_single_volume(
+                    data['image'], data['label'], model,
+                    classes=config.num_classes,
+                    patch_size=[config.input_size_h, config.input_size_w],
+                    test_save_path=outputs, case=case_name,
+                    z_spacing=config.z_spacing, val_or_test=False,
+                    condition_mode=mode, audit_seed=config.seed + case_index * 100000,
+                    branch_audit=True,
+                )
+                case_seconds = time.perf_counter() - start
+                total_inference_seconds += case_seconds
+                for branch in ('spm', 'diffusion', 'final'):
+                    result = branches[branch]
+                    metrics = np.asarray(result['metrics'], dtype=float)
+                    rows.append({
+                        'case': case_name,
+                        'condition_mode': mode,
+                        'branch': branch,
+                        'rv_dice': float(metrics[0, 0]),
+                        'myo_dice': float(metrics[1, 0]),
+                        'lv_dice': float(metrics[2, 0]),
+                        'mean_dice': float(metrics[:, 0].mean()),
+                        'mean_hd95': float(metrics[:, 1].mean()),
+                        'logit_mean_abs': result['logit_mean_abs'],
+                        'logit_std': result['logit_std'],
+                        'case_inference_seconds': case_seconds,
+                    })
+            if expected_cases is None:
+                expected_cases = case_names
+            elif case_names != expected_cases:
+                raise RuntimeError(f'Validation cases changed in branch audit mode {mode}')
+            for row in rows:
+                row['mode_total_inference_seconds'] = total_inference_seconds
+                record.write(json.dumps(row, ensure_ascii=False) + '\n')
+            record.flush()
+            log_info = (f'ACDC image branch audit: mode={mode}, cases={len(case_names)}, '
+                        f'rows={len(rows)}, total_inference_seconds={total_inference_seconds:.2f}')
+            print(log_info)
+            logger.info(log_info)
+    print(f'ACDC image branch audit output: {output_path}')
+    logger.info('ACDC image branch audit output: %s', output_path)
+    return output_path
+
+
+def run_spm_embedding_scale_audit(val_loader, model, config, outputs, logger):
+    scales = (0.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5)
+    output_path = os.path.join(outputs, 'spm_embedding_scale_audit.jsonl')
+    expected_cases = None
+    model.eval()
+    with open(output_path, 'w', encoding='utf-8') as record, torch.no_grad():
+        for spm_scale in scales:
+            set_seed(config.seed)
+            rows = []
+            case_names = []
+            total_inference_seconds = 0.0
+            for case_index, data in enumerate(val_loader):
+                case_name = data['case_name'][0]
+                case_names.append(case_name)
+                start = time.perf_counter()
+                branches = test_single_volume(
+                    data['image'], data['label'], model,
+                    classes=config.num_classes,
+                    patch_size=[config.input_size_h, config.input_size_w],
+                    test_save_path=outputs, case=case_name,
+                    z_spacing=config.z_spacing, val_or_test=False,
+                    condition_mode='normal', audit_seed=config.seed + case_index * 100000,
+                    branch_audit=True, spm_scale=spm_scale,
+                )
+                case_seconds = time.perf_counter() - start
+                total_inference_seconds += case_seconds
+                for branch in ('spm', 'diffusion', 'final'):
+                    result = branches[branch]
+                    metrics = np.asarray(result['metrics'], dtype=float)
+                    rows.append({
+                        'case': case_name,
+                        'spm_scale': spm_scale,
+                        'branch': branch,
+                        'rv_dice': float(metrics[0, 0]),
+                        'myo_dice': float(metrics[1, 0]),
+                        'lv_dice': float(metrics[2, 0]),
+                        'mean_dice': float(metrics[:, 0].mean()),
+                        'mean_hd95': float(metrics[:, 1].mean()),
+                        'logit_mean_abs': result['logit_mean_abs'],
+                        'logit_std': result['logit_std'],
+                        'case_inference_seconds': case_seconds,
+                    })
+            if expected_cases is None:
+                expected_cases = case_names
+            elif case_names != expected_cases:
+                raise RuntimeError(f'Validation cases changed at SPM scale {spm_scale}')
+            for row in rows:
+                row['scale_total_inference_seconds'] = total_inference_seconds
+                record.write(json.dumps(row, ensure_ascii=False) + '\n')
+            record.flush()
+            log_info = (f'ACDC SPM scale audit: scale={spm_scale}, cases={len(case_names)}, '
+                        f'rows={len(rows)}, total_inference_seconds={total_inference_seconds:.2f}')
+            print(log_info)
+            logger.info(log_info)
+    print(f'ACDC SPM scale audit output: {output_path}')
+    logger.info('ACDC SPM scale audit output: %s', output_path)
+    return output_path
+
+
 def main(config):
     local_debug = os.getenv("LOCAL_DEBUG", "0") == "1"
+    trajectory_debug = os.getenv("ACDC_TRAJECTORY_DEBUG", "0") == "1"
+    diffusion_audit = os.getenv("ACDC_DIFFUSION_AUDIT", "0") == "1"
+    image_condition_audit = os.getenv("ACDC_IMAGE_CONDITION_AUDIT", "0") == "1"
+    image_branch_audit = os.getenv("ACDC_IMAGE_BRANCH_AUDIT", "0") == "1"
+    spm_scale_audit = os.getenv("ACDC_SPM_SCALE_AUDIT", "0") == "1"
+    correction_oracle_audit = os.getenv("ACDC_CORRECTION_ORACLE_AUDIT", "0") == "1"
+    disagreement_utility_audit = os.getenv("ACDC_DISAGREEMENT_UTILITY_AUDIT", "0") == "1"
+    if ((diffusion_audit or image_condition_audit or image_branch_audit or spm_scale_audit
+         or correction_oracle_audit or disagreement_utility_audit) and not config.only_test_and_save_figs):
+        raise ValueError("Inference audits require only_test_and_save_figs=True")
+    if disagreement_utility_audit and (diffusion_audit or image_condition_audit or image_branch_audit
+                                      or spm_scale_audit or correction_oracle_audit
+                                      or trajectory_debug or local_debug):
+        raise ValueError("Run ACDC_DISAGREEMENT_UTILITY_AUDIT independently of all other audit/debug flags")
+    if correction_oracle_audit and (diffusion_audit or image_condition_audit or image_branch_audit
+                                    or spm_scale_audit or trajectory_debug or local_debug):
+        raise ValueError("Run ACDC_CORRECTION_ORACLE_AUDIT independently of all other audit/debug flags")
+    if diffusion_audit and image_condition_audit:
+        raise ValueError("Run only one inference audit at a time")
+    if image_branch_audit and (diffusion_audit or image_condition_audit or trajectory_debug):
+        raise ValueError("Run ACDC_IMAGE_BRANCH_AUDIT independently of other audits/debug flags")
+    if spm_scale_audit and (diffusion_audit or image_condition_audit or image_branch_audit
+                            or trajectory_debug):
+        raise ValueError("Run ACDC_SPM_SCALE_AUDIT independently of other audits/debug flags")
 
     if local_debug:
         print("⚠️ LOCAL_DEBUG 模式：MX350 本地调试")
@@ -144,6 +397,12 @@ def main(config):
         RandomGenerator([img_size, img_size])]))
     val_dataset = BaseDataSets(base_dir=root_path, split="val")
     test_dataset = BaseDataSets(base_dir=root_path, split="test_vol")
+    if trajectory_debug:
+        if len(test_dataset) != 40:
+            raise ValueError(f"Expected 40 ACDC test cases, found {len(test_dataset)}")
+        selected_cases = [name.replace('.h5', '') for name in test_dataset.sample_list]
+        print(f"ACDC trajectory debug test cases: {selected_cases}")
+        logger.info('ACDC trajectory debug test cases: %s', selected_cases)
     
     
     train_sampler = DistributedSampler(train_dataset, shuffle=True) if config.distributed else None
@@ -267,6 +526,26 @@ def main(config):
 
         # 3. 加载权重 (strict=False 防止因缺少 edge_model 报错，且不打印警告)
         model.load_state_dict(new_state_dict, strict=False)
+        if disagreement_utility_audit:
+            from disagreement_utility_audit import run_disagreement_utility_audit
+            run_disagreement_utility_audit(val_loader, model, config, outputs, logger)
+            return
+        if correction_oracle_audit:
+            from correction_oracle_audit import run_correction_oracle_audit
+            run_correction_oracle_audit(val_loader, model, config, outputs, logger)
+            return
+        if spm_scale_audit:
+            run_spm_embedding_scale_audit(val_loader, model, config, outputs, logger)
+            return
+        if image_branch_audit:
+            run_image_condition_branch_audit(val_loader, model, config, outputs, logger)
+            return
+        if image_condition_audit:
+            run_image_condition_dominance_audit(val_loader, model, config, outputs, logger)
+            return
+        if diffusion_audit:
+            run_diffusion_dependence_audit(val_loader, model, config, outputs, logger)
+            return
         
         config.work_dir = config.img_save_path
         epoch=1
@@ -393,4 +672,4 @@ def main(config):
 
 if __name__ == '__main__':
     config = setting_config
-    main(config)       
+    main(config)

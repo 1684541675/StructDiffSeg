@@ -55,8 +55,8 @@ class BaseDataSets(Dataset):
         if os.getenv("LOCAL_DEBUG", "0") == "1":
             if self.split.find("train") != -1:
                 self.sample_list = self.sample_list[:20]
-            else:
-                self.sample_list = self.sample_list[:1]
+            elif not (self.split.find("test") != -1 and os.getenv("ACDC_TRAJECTORY_DEBUG", "0") == "1"):
+                self.sample_list = self.sample_list[:10]
 
             print(f"⚠️ LOCAL_DEBUG：当前仅使用 {len(self.sample_list)} 个样本")
                 

@@ -241,7 +241,10 @@ class PlainConvUNet(nn.Module):
         return t.view(*t.shape, *((1,) * padding_dims))
     
     @torch.no_grad()
-    def ddim_sample(self, image, embeddings=None):
+    def ddim_sample(self, image, embeddings=None, debug_trajectory=False, ablation_mode=None):
+        if ablation_mode not in (None, 'normal', 'zero_state', 'fresh_noise',
+                                 'shuffled_state', 'fixed_time'):
+            raise ValueError(f'Unknown DDIM ablation mode: {ablation_mode}')
         device = image.device
         b, _,  h, w = image.shape
         time_pairs = self._get_sampling_timesteps(self.randsteps*b, device=device)
@@ -266,9 +269,26 @@ class PlainConvUNet(nn.Module):
             alpha, sigma = log_snr_to_alpha_sigma(padded_log_snr)
             alpha_next, sigma_next = log_snr_to_alpha_sigma(padded_log_snr_next)
 
-            input_times = self.time_mlp(log_snr)
+            if ablation_mode == 'fixed_time':
+                input_log_snr = self.log_snr(torch.full_like(times_now, 0.5))
+            else:
+                input_log_snr = log_snr
+            input_times = self.time_mlp(input_log_snr)
 
-            inputs = torch.cat([image, mask_t], dim=1)
+            if ablation_mode == 'zero_state':
+                x_input = torch.zeros_like(mask_t)
+            elif ablation_mode == 'fresh_noise':
+                x_input = torch.randn_like(mask_t)
+            elif ablation_mode == 'shuffled_state':
+                permutations = torch.stack([
+                    torch.randperm(h * w, device=device) for _ in range(mask_t.shape[0])
+                ])
+                x_input = mask_t.flatten(2).gather(
+                    2, permutations[:, None, :].expand(-1, self.num_classes, -1)
+                ).reshape_as(mask_t)
+            else:
+                x_input = mask_t
+            inputs = torch.cat([image, x_input], dim=1)
             skips = self.encoder(inputs, input_times, embeddings=embeddings)
             pred = self.decoder(skips, input_times)
             
@@ -321,10 +341,15 @@ class PlainConvUNet(nn.Module):
             # Weighted Sum: sum(W * Logits) over T dimension
             final_logit = (mean_logits * norm_weights).sum(dim=0)
             
+            if debug_trajectory:
+                # Batch first so DataParallel gathers complete cases correctly.
+                return final_logit, mean_logits.permute(1, 0, 2, 3, 4)
             return final_logit
 
         # Fallback (no accumulation)
         pred = pred.reshape(self.randsteps, b, self.num_classes, h, w).mean(dim=0)
+        if debug_trajectory:
+            raise RuntimeError("DDIM trajectory debugging requires accumulation=True")
         return pred
     '''
      @torch.no_grad()
@@ -380,10 +405,12 @@ class PlainConvUNet(nn.Module):
 
     
 
-    def forward(self, image, gt=None, embeddings=None, ddim=False):
+    def forward(self, image, gt=None, embeddings=None, ddim=False, debug_trajectory=False,
+                ablation_mode=None):
 
         if ddim:
-            return self.ddim_sample(image, embeddings=embeddings)
+            return self.ddim_sample(image, embeddings=embeddings,
+                                    debug_trajectory=debug_trajectory, ablation_mode=ablation_mode)
         
         device = image.device
 
@@ -570,4 +597,4 @@ def get_nnunet2d_denoise(in_chans, out_chans, ddim_step=3, rand_step=1, bta=True
                           **other_kwargs,
                           )
 
-    return model 
+    return model

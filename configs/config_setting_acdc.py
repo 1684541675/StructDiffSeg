@@ -52,7 +52,7 @@ class setting_config:
     print_interval = 10
     val_interval = 1
     threshold = 0.5
-    only_test_and_save_figs = False
+    only_test_and_save_figs = True
     best_ckpt_path = "results/acdc1-diffspm/checkpoints/best.pth"
     img_save_path = 'imagesacdc'
     

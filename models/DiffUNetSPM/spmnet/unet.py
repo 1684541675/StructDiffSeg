@@ -70,7 +70,7 @@ class network(nn.Module):
         self.segmentation_head = nn.Conv2d(channels[0], out_channel, kernel_size=3, padding=1)
 
 
-    def forward(self, x):
+    def forward(self, x, return_shape_prior=False):
         B = x.size()[0]
         skips_features=[]
         #if x.size()[1] == 1:
@@ -138,6 +138,8 @@ class network(nn.Module):
         feature_after = F.interpolate(class_feature3, scale_factor=2, mode="trilinear")
         feature_after = feature_after[:, 0: 16]
         '''
+        if return_shape_prior:
+            return x, skips_features, refined_shape_prior
         return x,skips_features
 
         
