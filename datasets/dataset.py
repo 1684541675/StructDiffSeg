@@ -14,8 +14,19 @@ from PIL import Image
 from torchvision import transforms
 
 class NPY_datasets(Dataset):
-    def __init__(self, path_Data, config, train=True):
+    def __init__(self, path_Data, config=None, train=True, *, split=None,
+                 list_dir=None, output_size=(256, 256)):
+        """Original tuple interface, or binary RGB dict interface with split set.
+
+        Example: NPY_datasets(root, split='train'). TXT mode uses its own
+        preprocessing; config transformers apply only to the original mode.
+        """
         super(NPY_datasets, self)
+        self.binary_dataset = None
+        if split is not None:
+            self.binary_dataset = RGBBinaryDataset(
+                path_Data, split, list_dir=list_dir, output_size=output_size)
+            return
         if train:
             images_list = sorted(os.listdir(path_Data+'train/images/'))
             masks_list = sorted(os.listdir(path_Data+'train/masks/'))
@@ -36,6 +47,8 @@ class NPY_datasets(Dataset):
             self.transformer = config.test_transformer
         
     def __getitem__(self, indx):
+        if self.binary_dataset is not None:
+            return self.binary_dataset[indx]
         img_path, msk_path = self.data[indx]
         img = np.array(Image.open(img_path).convert('RGB'))
         msk = np.expand_dims(np.array(Image.open(msk_path).convert('L')), axis=2) / 255
@@ -43,6 +56,8 @@ class NPY_datasets(Dataset):
         return img, msk
 
     def __len__(self):
+        if self.binary_dataset is not None:
+            return len(self.binary_dataset)
         return len(self.data)
     
 
@@ -55,6 +70,94 @@ def random_rot_flip(image, label):
     image = np.flip(image, axis=axis).copy()
     label = np.flip(label, axis=axis).copy()
     return image, label
+
+
+class RGBBinaryTransform:
+    """Shared train-only rotations/flips; deterministic resize for val/test.
+
+    output_size is (height, width). RGB uses bilinear resize and [0, 1]
+    normalization; binary class labels use nearest resize.
+    """
+
+    def __init__(self, output_size=(256, 256), augment=False):
+        if (len(output_size) != 2 or
+                any(not isinstance(size, int) or size <= 0 for size in output_size)):
+            raise ValueError('output_size must contain two positive integers')
+        if augment and output_size[0] != output_size[1]:
+            raise ValueError('rotation augmentation requires a square output_size')
+        self.output_size = tuple(output_size)
+        self.augment = augment
+
+    def __call__(self, sample):
+        image, label = sample['image'], sample['label']
+        size = (self.output_size[1], self.output_size[0])
+        image = np.asarray(Image.fromarray(image).resize(size, Image.Resampling.BILINEAR))
+        # Merge instance IDs before resize; never divide the mask by 255.
+        label = np.asarray(Image.fromarray((label > 0).astype(np.uint8)).resize(
+            size, Image.Resampling.NEAREST))
+        if self.augment:
+            image, label = random_rot_flip(image, label)
+        result = dict(sample)
+        result['image'] = torch.from_numpy(
+            np.ascontiguousarray(image.transpose(2, 0, 1), dtype=np.float32)) / 255.0
+        result['label'] = torch.from_numpy(np.ascontiguousarray(label, dtype=np.int64))
+        return result
+
+
+class RGBBinaryDataset(Dataset):
+    """GlaS/CVC PNG pairs selected by train.txt, val.txt or test.txt.
+
+    Layout: root/images/<ID>.png and root/masks/<ID>.png. Split files
+    default to root; list_dir may specify a different directory. Nonzero
+    mask values are foreground; raw instance IDs are preserved when read.
+    """
+
+    def __init__(self, base_dir, split, list_dir=None, output_size=(256, 256)):
+        if split not in ('train', 'val', 'test'):
+            raise ValueError("split must be 'train', 'val' or 'test'")
+        self.split = split
+        self.data_dir = os.fspath(base_dir)
+        self.transform = RGBBinaryTransform(output_size, augment=split == 'train')
+        split_path = os.path.join(list_dir if list_dir is not None else base_dir,
+                                  split + '.txt')
+        with open(split_path, encoding='utf-8-sig') as handle:
+            self.sample_list = [line.strip() for line in handle if line.strip()]
+        if not self.sample_list:
+            raise ValueError(f'Empty split file: {split_path}')
+        if len(set(self.sample_list)) != len(self.sample_list):
+            raise ValueError(f'Duplicate IDs in split file: {split_path}')
+        self.data = []
+        for case_name in self.sample_list:
+            if (case_name in ('.', '..') or '/' in case_name or
+                    '\\' in case_name or ':' in case_name):
+                raise ValueError(f'Expected a plain sample ID, got {case_name!r}')
+            image_path = os.path.join(self.data_dir, 'images', case_name + '.png')
+            mask_path = os.path.join(self.data_dir, 'masks', case_name + '.png')
+            for path in (image_path, mask_path):
+                if not os.path.isfile(path):
+                    raise FileNotFoundError(f'Missing {split} sample {case_name}: {path}')
+            self.data.append((image_path, mask_path))
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        image_path, mask_path = self.data[idx]
+        with Image.open(image_path) as image_file:
+            image = np.array(image_file.convert('RGB'))
+        with Image.open(mask_path) as mask_file:
+            label = np.array(mask_file)
+        # CVC stores grayscale binary masks in three identical RGB channels.
+        if label.ndim == 3 and label.shape[2] == 3:
+            if not np.all(label == label[..., :1]):
+                raise ValueError(f'Expected identical RGB mask channels: {mask_path}')
+            label = label[..., 0]
+        if label.ndim != 2:
+            raise ValueError(f'Expected a 2D class/instance mask: {mask_path}')
+        if image.shape[:2] != label.shape:
+            raise ValueError(f'Image/mask dimensions differ: {image_path}, {mask_path}')
+        return self.transform({'image': image, 'label': label,
+                               'case_name': self.sample_list[idx]})
 
 
 def random_rotate(image, label):
