@@ -21,10 +21,10 @@ from models.SPM5121.vit_seg_configs import get_r50_b16_config
 
 #from models.DiffUNetSPM7.diffunet.diffunet_model import DiffUNet
 
-from models.DiffUNetSPM.diffunet.diffunet_model import DiffUNet
+#from models.DiffUNetSPM.diffunet.diffunet_model import DiffUNet
 #最优的
 
-#from models.DiffUNet3201.diffunet.diffunet_model import DiffUNet
+from models.DiffUNet3201.diffunet.diffunet_model import DiffUNet
 
 #from models.DiffSPM1.diffunet.diffunet_model import DiffUNet
 
@@ -470,8 +470,8 @@ def main(config):
         '''
         
         #model = netspm(model_cfg['input_channels'],model_cfg['num_classes'],config=config_vit)
-        model = DiffUNet(model_cfg['input_channels'],model_cfg['num_classes'],ddim_steps=10,config=config_vit)
-        #model = DiffUNet(model_cfg['input_channels'],model_cfg['num_classes'],ddim_steps=10)
+        #model = DiffUNet(model_cfg['input_channels'],model_cfg['num_classes'],ddim_steps=10,config=config_vit)
+        model = DiffUNet(model_cfg['input_channels'],model_cfg['num_classes'],ddim_steps=3)
     
         
         #model.load_from()
