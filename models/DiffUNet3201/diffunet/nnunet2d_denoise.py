@@ -480,8 +480,12 @@ conv_op = nn.Conv2d
 def get_nnunet2d_denoise(in_chans, out_chans, ddim_step=3, rand_step=1, bta=True,
                          lambda_geo=None):
     # Optional experiment override without changing the ACDC training entry.
+    source = "explicit argument"
     if lambda_geo is None:
-        lambda_geo = float(os.getenv("DIFFUNET_LAMBDA_GEO", "0.25"))
+        env_value = os.getenv("DIFFUNET_LAMBDA_GEO")
+        lambda_geo = float(env_value) if env_value is not None else 0.25
+        source = ("environment DIFFUNET_LAMBDA_GEO" if env_value is not None
+                  else "default (DIFFUNET_LAMBDA_GEO unset)")
     model = PlainConvUNet(input_channels=in_chans, 
                           n_stages=num_stages, 
                           features_per_stage=[min(unet_config["UNet_base_num_features"] * 2 ** i,
@@ -498,4 +502,13 @@ def get_nnunet2d_denoise(in_chans, out_chans, ddim_step=3, rand_step=1, bta=True
                           **other_kwargs,
                           )
 
-    return model 
+    sdf_enabled = model.lambda_geo > 0
+    mode = "Class Embedding + SDF" if sdf_enabled else "Class Embedding only"
+    print(
+        f"[DiffUNet label encoding] mode={mode} | lambda_geo={model.lambda_geo:g} | "
+        f"source={source} | SDF={'enabled' if sdf_enabled else 'disabled (skipped)'} | "
+        f"R=16 px | bit_scale={model.bit_scale:g} | DDIM steps={model.timesteps}",
+        flush=True,
+    )
+
+    return model

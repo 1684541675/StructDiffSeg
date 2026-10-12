@@ -21,6 +21,8 @@ z0 = 0.001 * ((1 - lambda_geo) * C - lambda_geo * SDF)
 
 内部负、外部正，缺失类别恒 +1，整幅类别恒 -1。距离单位为像素，使用像素中心距离；边界两侧相邻像素为 ±1/16。
 默认 `lambda_geo=0.25`；工厂支持 `DIFFUNET_LAMBDA_GEO` 环境变量，显式工厂参数优先。
+模型创建时会打印实际 `lambda_geo`、编码模式、SDF 开关、参数来源、R、bit_scale 和 DDIM 步数。
+未设置环境变量时打印 `source=default (DIFFUNET_LAMBDA_GEO unset)`；设置为 0 时打印 `Class Embedding only` 与 `SDF=disabled (skipped)`。
 `lambda_geo=0` 直接返回原 Class Embedding 编码，逐元素一致，并完全跳过 SDF。
 SDF 在模型中从已完成空间增强的输入标签计算；MC-Diff 在重复 batch 前编码。
 推理仅从当步预测的 argmax 生成 SDF，GT 不进入编码。
