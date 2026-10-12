@@ -9,9 +9,11 @@ from torch.nn.modules.dropout import _DropoutNd
 import einops
 from .encoder_denoise import PlainConvEncoder
 from .decoder_denoise import UNetDecoder
+from .sdf import multiclass_sdf
 from dynamic_network_architectures.building_blocks.helper import convert_conv_op_to_dim
 
 import math 
+import os
 
 def log(t, eps=1e-20):
     return torch.log(t.clamp(min=eps))
@@ -170,6 +172,7 @@ class PlainConvUNet(nn.Module):
                  ddim_step=5,
                  rand_step=1,
                  bta=True,
+                 lambda_geo=0.25,
                  ):
         """
         nonlin_first: if True you get conv -> nonlin -> norm. Else it's conv -> norm -> nonlin
@@ -208,6 +211,9 @@ class PlainConvUNet(nn.Module):
         self.diffusion="ddim"
         self.accumulation=True
         self.bit_scale = 0.001 
+        if not math.isfinite(lambda_geo) or not 0 <= lambda_geo <= 1:
+            raise ValueError("lambda_geo must be finite and in [0, 1]")
+        self.lambda_geo = float(lambda_geo)
         # time embeddings
         time_dim = 32 
         sinu_pos_emb = LearnedSinusoidalPosEmb(self.learned_sinusoidal_dim)
@@ -222,6 +228,24 @@ class PlainConvUNet(nn.Module):
 
         self.index = 0
         self.uncer_step = 3 
+
+    def encode_mask(self, mask):
+        """Encode augmented GT or current argmax labels with the same rule.
+
+        SDF uses pixel distances (R=16); it is detached, while the original
+        class embedding remains trainable. No additional learned parameters.
+        """
+        if mask.ndim == 4 and mask.shape[1] == 1:
+            mask = mask.squeeze(1)
+        if mask.ndim != 3:
+            raise ValueError("mask must have shape [B,H,W] or [B,1,H,W]")
+        labels = mask.to(device=self.embedding_table.weight.device, dtype=torch.long)
+        classes = self.embedding_table(labels).permute(0, 3, 1, 2)
+        classes = torch.sigmoid(classes) * 2 - 1
+        if self.lambda_geo == 0:
+            return classes * self.bit_scale
+        sdf = multiclass_sdf(labels, num_classes=self.num_classes, dtype=classes.dtype)
+        return self.bit_scale * ((1 - self.lambda_geo) * classes - self.lambda_geo * sdf)
     
     def _get_sampling_timesteps(self, batch, *, device):
         times = []
@@ -269,8 +293,7 @@ class PlainConvUNet(nn.Module):
             pred = self.decoder(skips, input_times)
             
             mask_pred = torch.argmax(pred, dim=1)
-            mask_pred = self.embedding_table(mask_pred).permute(0,  3,1, 2)
-            mask_pred = (torch.sigmoid(mask_pred) * 2 - 1) * self.bit_scale
+            mask_pred = self.encode_mask(mask_pred)
             pred_noise = (mask_t - alpha * mask_pred) / sigma.clamp(min=1e-8)
             mask_t = mask_pred * alpha_next + pred_noise * sigma_next
             
@@ -297,10 +320,7 @@ class PlainConvUNet(nn.Module):
         times = torch.zeros((image.shape[0],), device=device).float().uniform_(self.sample_range[0],
                                                                   self.sample_range[1])  # [bs]
         # random noise
-        gt_first = gt.long()
-        gt_first = self.embedding_table(gt_first)
-        gt_first = gt_first.squeeze(dim=1).permute(0, 3,1, 2)
-        gt_first = (torch.sigmoid(gt_first) * 2 - 1) * self.bit_scale
+        gt_first = self.encode_mask(gt)
 
         noise = torch.randn_like(gt_first)
 
@@ -324,10 +344,7 @@ class PlainConvUNet(nn.Module):
             times = torch.zeros((image.shape[0]*uncer_step,), device=device).float().uniform_(self.sample_range[0],
                                                                     self.sample_range[1])  # [bs]
             # random noise
-            gt = gt.long()
-            gt = self.embedding_table(gt)
-            gt = gt.squeeze(dim=1).permute(0,  3,1 ,2)
-            gt = (torch.sigmoid(gt) * 2 - 1) * self.bit_scale
+            gt = self.encode_mask(gt)
 
             gt = gt.repeat(uncer_step, 1, 1,  1)
             noise = torch.randn_like(gt)
@@ -358,7 +375,7 @@ class PlainConvUNet(nn.Module):
     def compute_uncer(self, pred_out):
 
         uncer_out = torch.softmax(pred_out, dim=1).clamp(0.0001, 0.9999)
-        ## 计算学习比重
+        ## first forward:
         uncer_out = torch.sum(-uncer_out * torch.log(uncer_out), dim=1)
 
         return uncer_out
@@ -460,7 +477,11 @@ other_kwargs = {
         }
 conv_op = nn.Conv2d
 
-def get_nnunet2d_denoise(in_chans, out_chans, ddim_step=3, rand_step=1, bta=True):
+def get_nnunet2d_denoise(in_chans, out_chans, ddim_step=3, rand_step=1, bta=True,
+                         lambda_geo=None):
+    # Optional experiment override without changing the ACDC training entry.
+    if lambda_geo is None:
+        lambda_geo = float(os.getenv("DIFFUNET_LAMBDA_GEO", "0.25"))
     model = PlainConvUNet(input_channels=in_chans, 
                           n_stages=num_stages, 
                           features_per_stage=[min(unet_config["UNet_base_num_features"] * 2 ** i,
@@ -472,6 +493,7 @@ def get_nnunet2d_denoise(in_chans, out_chans, ddim_step=3, rand_step=1, bta=True
                           ddim_step=ddim_step,
                           rand_step=rand_step,
                           bta=bta,
+                          lambda_geo=lambda_geo,
                           **conv_or_blocks_per_stage,
                           **other_kwargs,
                           )
