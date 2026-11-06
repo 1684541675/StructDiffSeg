@@ -313,7 +313,7 @@ class PlainConvUNet(nn.Module):
         #print("noised_gt shape:", noised_gt.shape)
         image_first = torch.cat([image, noised_gt], dim=1)
 
-        times_first = self.time_mlp(times)
+        times_first = self.time_mlp(noise_level)
 
         skips = self.encoder(image_first, times_first, embeddings=embeddings)
         
@@ -341,7 +341,7 @@ class PlainConvUNet(nn.Module):
 
             image = torch.cat([image, noised_gt], dim=1)
 
-            times = self.time_mlp(times)
+            times = self.time_mlp(noise_level)
 
             skips = self.encoder(image, times, embeddings=embeddings)
             
