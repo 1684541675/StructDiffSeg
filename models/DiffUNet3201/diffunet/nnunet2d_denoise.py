@@ -170,6 +170,8 @@ class PlainConvUNet(nn.Module):
                  ddim_step=5,
                  rand_step=1,
                  bta=True,
+                 enable_gcf=False,
+                 gcf_stage=2,
                  ):
         """
         nonlin_first: if True you get conv -> nonlin -> norm. Else it's conv -> norm -> nonlin
@@ -189,7 +191,8 @@ class PlainConvUNet(nn.Module):
         self.encoder = PlainConvEncoder(input_channels+num_classes, n_stages, features_per_stage, conv_op, kernel_sizes, strides,
                                         n_conv_per_stage, conv_bias, norm_op, norm_op_kwargs, dropout_op,
                                         dropout_op_kwargs, nonlin, nonlin_kwargs, return_skips=True,
-                                        nonlin_first=nonlin_first,bta=bta,)
+                                        nonlin_first=nonlin_first,bta=bta,
+                                         enable_gcf=enable_gcf, gcf_stage=gcf_stage, time_dim=32,)
         
         self.decoder = UNetDecoder(self.encoder, num_classes, n_conv_per_stage_decoder, 
                                    deep_supervision=deep_supervision,
@@ -241,7 +244,7 @@ class PlainConvUNet(nn.Module):
         return t.view(*t.shape, *((1,) * padding_dims))
 
     @torch.no_grad()
-    def ddim_sample(self, image, embeddings=None):
+    def ddim_sample(self, image, embeddings=None, sdf=None):
         device = image.device
         b, _,  h, w = image.shape
         time_pairs = self._get_sampling_timesteps(self.randsteps*b, device=device)
@@ -265,7 +268,7 @@ class PlainConvUNet(nn.Module):
             input_times = self.time_mlp(log_snr)
 
             inputs = torch.cat([image, mask_t], dim=1)
-            skips = self.encoder(inputs, input_times, embeddings=embeddings)
+            skips = self.encoder(inputs, input_times, embeddings=embeddings, sdf=sdf)
             pred = self.decoder(skips, input_times)
             
             mask_pred = torch.argmax(pred, dim=1)
@@ -286,10 +289,10 @@ class PlainConvUNet(nn.Module):
         mask_logit = mask_logit.mean(dim=0)
         return mask_logit
 
-    def forward(self, image, gt=None, embeddings=None, ddim=False):
+    def forward(self, image, gt=None, embeddings=None, ddim=False, sdf=None):
 
         if ddim:
-            return self.ddim_sample(image, embeddings=embeddings)
+            return self.ddim_sample(image, embeddings=embeddings, sdf=sdf)
         
         device = image.device
 
@@ -315,7 +318,7 @@ class PlainConvUNet(nn.Module):
 
         times_first = self.time_mlp(noise_level)
 
-        skips = self.encoder(image_first, times_first, embeddings=embeddings)
+        skips = self.encoder(image_first, times_first, embeddings=embeddings, sdf=sdf)
         
         pred_first = self.decoder(skips, times_first)
 
@@ -343,7 +346,7 @@ class PlainConvUNet(nn.Module):
 
             times = self.time_mlp(noise_level)
 
-            skips = self.encoder(image, times, embeddings=embeddings)
+            skips = self.encoder(image, times, embeddings=embeddings, sdf=sdf)
             
             pred = self.decoder(skips, times)
             
@@ -460,7 +463,8 @@ other_kwargs = {
         }
 conv_op = nn.Conv2d
 
-def get_nnunet2d_denoise(in_chans, out_chans, ddim_step=3, rand_step=1, bta=True):
+def get_nnunet2d_denoise(in_chans, out_chans, ddim_step=3, rand_step=1, bta=True,
+                         enable_gcf=False, gcf_stage=2):
     model = PlainConvUNet(input_channels=in_chans, 
                           n_stages=num_stages, 
                           features_per_stage=[min(unet_config["UNet_base_num_features"] * 2 ** i,
@@ -472,6 +476,8 @@ def get_nnunet2d_denoise(in_chans, out_chans, ddim_step=3, rand_step=1, bta=True
                           ddim_step=ddim_step,
                           rand_step=rand_step,
                           bta=bta,
+                          enable_gcf=enable_gcf,
+                          gcf_stage=gcf_stage,
                           **conv_or_blocks_per_stage,
                           **other_kwargs,
                           )
