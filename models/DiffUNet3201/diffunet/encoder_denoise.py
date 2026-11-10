@@ -4,6 +4,7 @@ from typing import Union, Type, List, Tuple
 from torch.nn.modules.conv import _ConvNd
 from torch.nn.modules.dropout import _DropoutNd
 from .block_denoise import StackedConvBlocks
+from .gcf import GeometryConditionedFusion
 from dynamic_network_architectures.building_blocks.helper import maybe_convert_scalar_to_list, get_matching_pool_op
 import math 
 import torch.nn as nn
@@ -74,6 +75,9 @@ class PlainConvEncoder(nn.Module):
                  nonlin_first: bool = False,
                  pool: str = 'conv',
                  bta=True,
+                 enable_gcf=False,
+                 gcf_stage=2,
+                 time_dim=32,
                  ):
 
         super().__init__()
@@ -131,9 +135,17 @@ class PlainConvEncoder(nn.Module):
         self.conv_bias = conv_bias
         self.kernel_sizes = kernel_sizes
         self.bta = bta
+        if enable_gcf and (not bta or not (0 <= gcf_stage < n_stages - 1)):
+            raise ValueError("GCF requires BTA and a non-bottleneck encoder stage")
+        self.gcf_stage = gcf_stage if enable_gcf else None
+        self.gcf = (
+            GeometryConditionedFusion(features_per_stage[gcf_stage], time_dim=time_dim)
+            if enable_gcf else None
+        )
 
-
-    def forward(self, x, temb, embeddings=None):
+    def forward(self, x, temb, embeddings=None, sdf=None):
+        if self.gcf is not None and (embeddings is None or sdf is None):
+            raise ValueError("GCF requires geometry embeddings and predicted SDF")
     
         ret = []
         index = 0
@@ -146,7 +158,9 @@ class PlainConvEncoder(nn.Module):
                     embeddings_index = embeddings_index.repeat(need_repeat, 1, 1, 1)
 
                 if self.bta:
-                    if index == len(self.stages) - 1:
+                    if self.gcf is not None and index == self.gcf_stage:
+                        x = self.gcf(x, embeddings_index, sdf, temb)
+                    elif index == len(self.stages) - 1:
                         x = affinity_fusion(x, embeddings_index)
                     else :
                         x = self.transforms[index](torch.cat([x, embeddings_index], dim=1))
