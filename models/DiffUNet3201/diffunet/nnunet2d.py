@@ -124,7 +124,8 @@ class PlainConvUNet(nn.Module):
                  nonlin: Union[None, Type[torch.nn.Module]] = None,
                  nonlin_kwargs: dict = None,
                  deep_supervision: bool = False,
-                 nonlin_first: bool = False
+                 nonlin_first: bool = False,
+                 enable_sdf: bool = False
                  ):
         """
         nonlin_first: if True you get conv -> nonlin -> norm. Else it's conv -> norm -> nonlin
@@ -147,9 +148,25 @@ class PlainConvUNet(nn.Module):
                                         nonlin_first=nonlin_first)
         self.decoder = UNetDecoder(self.encoder, num_classes, n_conv_per_stage_decoder, deep_supervision,
                                    nonlin_first=nonlin_first)
+        # Optional binary SDF head; disabled by default for baseline compatibility.
+        if enable_sdf and num_classes != 2:
+            raise ValueError("The single-channel SDF head requires binary segmentation")
+        self.sdf_head = (
+            nn.Sequential(
+                nn.Conv2d(self.encoder.output_channels[0], 1, kernel_size=3, padding=1),
+                nn.Tanh(),
+            )
+            if enable_sdf else None
+        )
 
-    def forward(self, x):
+    def forward(self, x, return_sdf=False):
         skips = self.encoder(x)
+        if return_sdf:
+            if self.sdf_head is None:
+                raise RuntimeError("SDF head is disabled; construct with enable_sdf=True")
+            seg_logits, final_feature = self.decoder(skips, return_last_feature=True)
+            predicted_sdf = self.sdf_head(final_feature)
+            return seg_logits, skips, predicted_sdf
         return self.decoder(skips), skips
 
     def compute_conv_feature_map_size(self, input_size):
@@ -210,7 +227,7 @@ class ResidualEncoderUNet(nn.Module):
                                                                                 "Give input_size=(x, y(, z))!"
         return self.encoder.compute_conv_feature_map_size(input_size) + self.decoder.compute_conv_feature_map_size(input_size)
 
-def get_nnunet2d(in_chans, out_chans):
+def get_nnunet2d(in_chans, out_chans, enable_sdf=False):
     model = PlainConvUNet(input_channels=in_chans, 
                           n_stages=num_stages, 
                           features_per_stage=[min(unet_config["UNet_base_num_features"] * 2 ** i,
@@ -221,6 +238,7 @@ def get_nnunet2d(in_chans, out_chans):
                           num_classes=out_chans,
                           **conv_or_blocks_per_stage,
                           **other_kwargs,
+                          enable_sdf=enable_sdf,
                           )
 
     return model 
