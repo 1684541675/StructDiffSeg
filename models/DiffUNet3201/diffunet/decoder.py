@@ -70,7 +70,7 @@ class UNetDecoder(nn.Module):
         self.transpconvs = nn.ModuleList(transpconvs)
         self.seg_layers = nn.ModuleList(seg_layers)
 
-    def forward(self, skips):
+    def forward(self, skips, return_last_feature=False):
         """
         we expect to get the skips in the order they were computed, so the bottleneck should be the last entry
         :param skips:
@@ -197,6 +197,9 @@ class UNetDecoder(nn.Module):
             r = seg_outputs[0]
         else:
             r = seg_outputs
+        if return_last_feature:
+            # High-resolution decoder feature before the segmentation head.
+            return r, lres_input
         return r
 
     def compute_conv_feature_map_size(self, input_size):
