@@ -68,11 +68,21 @@ def build_model(variant, ddim_steps=3, shared_seed=None):
             return reference
         torch.random.default_generator.manual_seed(shared_seed + 1)
         variant_model = construct(variant)
-        loaded = variant_model.load_state_dict(reference.state_dict(), strict=False)
-        expected_prefixes = ("edge_model.sdf_head.", "denoise_model.encoder.gcf.")
-        if loaded.unexpected_keys or any(
-                not key.startswith(expected_prefixes)
-                for key in loaded.missing_keys):
+        reference_state = reference.state_dict()
+        variant_state = variant_model.state_dict()
+        expected_missing = set(variant_state) - set(reference_state)
+        # The denoiser's decoder holds a reference to the same encoder module,
+        # so PyTorch lists each GCF parameter under *both* state_dict paths.
+        allowed_prefixes = (
+            "edge_model.sdf_head.",
+            "denoise_model.encoder.gcf.",
+            "denoise_model.decoder.encoder.gcf.",
+        )
+        loaded = variant_model.load_state_dict(reference_state, strict=False)
+        if (loaded.unexpected_keys
+                or set(loaded.missing_keys) != expected_missing
+                or any(not key.startswith(allowed_prefixes)
+                       for key in expected_missing)):
             raise RuntimeError("Unexpected shared-weight mismatch: " + str(loaded))
         return variant_model
 
