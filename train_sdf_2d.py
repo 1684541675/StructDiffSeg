@@ -40,16 +40,40 @@ from utils import CeDiceLoss
 VARIANTS = ("baseline", "sdf", "gcf")
 
 
-def build_model(variant, ddim_steps=3):
-    """All variants share the same DiffUNet3201 architecture."""
+def build_model(variant, ddim_steps=3, shared_seed=None):
+    """Initialize shared baseline weights identically in all three variants.
+
+    Additional SDF/GCF parameters are initialized independently. Constructing
+    a model with an extra head otherwise shifts the denoiser's random weights.
+    """
     if variant not in VARIANTS:
         raise ValueError("variant must be baseline, sdf or gcf")
-    return DiffUNet(
-        3, 2, ddim_steps=ddim_steps,
-        enable_sdf=(variant != "baseline"),
-        enable_gcf=(variant == "gcf"),
-        gcf_stage=2,
-    )
+
+    def construct(which):
+        return DiffUNet(
+            3, 2, ddim_steps=ddim_steps,
+            enable_sdf=(which != "baseline"),
+            enable_gcf=(which == "gcf"),
+            gcf_stage=2,
+        )
+
+    if shared_seed is None:
+        return construct(variant)
+    with torch.random.fork_rng(devices=[]):
+        # CPU-only initialization: avoid altering global train/DDIM RNG.
+        torch.random.default_generator.manual_seed(shared_seed)
+        reference = construct("baseline")
+        if variant == "baseline":
+            return reference
+        torch.random.default_generator.manual_seed(shared_seed + 1)
+        variant_model = construct(variant)
+        loaded = variant_model.load_state_dict(reference.state_dict(), strict=False)
+        expected_prefixes = ("edge_model.sdf_head.", "denoise_model.encoder.gcf.")
+        if loaded.unexpected_keys or any(
+                not key.startswith(expected_prefixes)
+                for key in loaded.missing_keys):
+            raise RuntimeError("Unexpected shared-weight mismatch: " + str(loaded))
+        return variant_model
 
 
 def baseline_update(batch, model, criterion, optimizer, *, epoch, epochs):
@@ -258,7 +282,7 @@ def run(args):
 
     train_loader, eval_loader = make_loaders(args)
     device = torch.device(args.device)
-    model = build_model(args.variant, args.ddim_steps).to(device)
+    model = build_model(args.variant, args.ddim_steps, shared_seed=args.seed).to(device)
     criterion = CeDiceLoss(2, [1, 1]).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr,
                                   weight_decay=args.weight_decay)
