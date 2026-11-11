@@ -105,6 +105,16 @@ class TestTrainSDF2D(unittest.TestCase):
                                report["loss_diffusion"] + report["loss_geometry"],
                                places=5)
 
+    def test_train_mode_uses_held_out_validation_and_saves_best(self):
+        args = self.args("--mode", "train", "--variant", "baseline",
+                         "--output-dir", str(self.root / "formal_baseline"))
+        result = run(args)
+        self.assertEqual(result["mode"], "train")
+        self.assertTrue((self.root / "formal_baseline" / "best.pt").is_file())
+        rows = (self.root / "formal_baseline" / "history.jsonl").read_text().splitlines()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(json.loads(rows[0])["cases_evaluated"], 1)
+
     def test_overfit_run_saves_artifacts_and_resumes(self):
         args = self.args()
         report = run(args)
