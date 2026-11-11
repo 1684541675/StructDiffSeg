@@ -5,6 +5,7 @@ Examples (from repository root):
     python smoke_sdf_rgb_2d.py --dataset glas --data-path D:/data/GlaS --mode data
     python smoke_sdf_rgb_2d.py --dataset glas --data-path D:/data/GlaS --mode forward --device cuda
     python smoke_sdf_rgb_2d.py --dataset cvc --data-path D:/data/CVC --mode step --device cuda
+    python smoke_sdf_rgb_2d.py --dataset glas --data-path D:/data/GlaS --mode step --device cuda --enable-gcf
 Expected layout: images/<ID>.png, masks/<ID>.png, train.txt / val.txt / test.txt.
 """
 
@@ -21,7 +22,7 @@ from utils import CeDiceLoss
 
 
 def run_smoke(dataset, data_path, *, list_dir=None, split="train", mode="data",
-              device="cpu", size=256, seed=42):
+              device="cpu", size=256, seed=42, enable_gcf=False):
     """Inspect one batch, optionally run forward or exactly one optimizer update."""
     if dataset not in ("glas", "cvc"):
         raise ValueError("dataset must be glas or cvc")
@@ -54,6 +55,7 @@ def run_smoke(dataset, data_path, *, list_dir=None, split="train", mode="data",
         "case_name": batch["case_name"][0],
         "device": str(device),
         "mode": mode,
+        "enable_gcf": bool(enable_gcf),
         "image_shape": list(image.shape),
         "label_shape": list(label.shape),
         "foreground_pixels": int(label.sum().item()),
@@ -62,7 +64,8 @@ def run_smoke(dataset, data_path, *, list_dir=None, split="train", mode="data",
     if mode == "data":
         return report
 
-    model = DiffUNet(3, 2, ddim_steps=3, enable_sdf=True).to(device)
+    model = DiffUNet(3, 2, ddim_steps=3, enable_sdf=True,
+                     enable_gcf=enable_gcf).to(device)
     criterion = CeDiceLoss(2, [1, 1]).to(device)
 
     if mode == "forward":
@@ -98,10 +101,13 @@ def main():
     parser.add_argument("--device", default="cpu", help="cpu or cuda")
     parser.add_argument("--size", default=256, type=int)
     parser.add_argument("--seed", default=42, type=int)
+    parser.add_argument("--enable-gcf", action="store_true",
+                        help="Enable SDF-conditioned fusion at encoder stage index=2")
     args = parser.parse_args()
     report = run_smoke(args.dataset, args.data_path, list_dir=args.list_dir,
                        split=args.split, mode=args.mode, device=args.device,
-                       size=args.size, seed=args.seed)
+                       size=args.size, seed=args.seed,
+                       enable_gcf=args.enable_gcf)
     print(json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False))
 
 
