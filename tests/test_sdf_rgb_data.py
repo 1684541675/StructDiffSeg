@@ -82,6 +82,24 @@ class TestRGBBinarySDFData(unittest.TestCase):
         self.assertGreater(result["grad_sdf_head"], 0.0)
         self.assertGreater(result["grad_denoiser"], 0.0)
 
+    def test_gcf_forward_on_png_batch(self):
+        result = run_smoke("glas", self.root, split="train",
+                           size=64, mode="forward", device="cpu",
+                           enable_gcf=True)
+        self.assertTrue(result["enable_gcf"])
+        self.assertEqual(result["diffusion_shape"], [1, 2, 64, 64])
+        self.assertEqual(result["geometry_shape"], [1, 2, 64, 64])
+        self.assertEqual(result["sdf_shape"], [1, 1, 64, 64])
+
+    def test_gcf_one_optimizer_update_on_png_batch(self):
+        result = run_smoke("glas", self.root, split="train",
+                           size=64, mode="step", device="cpu",
+                           enable_gcf=True)
+        self.assertTrue(result["enable_gcf"])
+        self.assertGreater(result["loss_sdf"], 0.0)
+        self.assertGreater(result["grad_sdf_head"], 0.0)
+        self.assertGreater(result["grad_denoiser"], 0.0)
+
     def test_bad_rgb_mask_and_split_gate(self):
         mask = np.zeros((64, 64, 3), dtype=np.uint8)
         mask[1, 1, 0] = 255
