@@ -1,7 +1,8 @@
 """Reproducible binary DiffUNet experiments: baseline / SDF / SDF+GCF.
 
 GlaS/CVC layout: root/images/<ID>.png, root/masks/<ID>.png,
-train.txt, val.txt and test.txt. The test split is never used here.
+train.txt, val.txt and test.txt. Test IDs are checked for overlap, but
+no test images/masks are loaded or evaluated.
 
 Two intentionally distinct modes:
   overfit: fixed subset of *training* images, no augmentation, evaluate that
