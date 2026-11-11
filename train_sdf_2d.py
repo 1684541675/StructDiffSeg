@@ -374,7 +374,7 @@ def make_parser():
     parser.add_argument("--overfit-samples", type=int, default=2)
     parser.add_argument("--ddim-steps", type=int, default=3)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=1e-2)
     parser.add_argument("--lambda-sdf", type=float, default=0.25)
     parser.add_argument("--sdf-radius", type=float, default=16.0)
