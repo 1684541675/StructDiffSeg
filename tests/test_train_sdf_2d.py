@@ -61,6 +61,19 @@ class TestTrainSDF2D(unittest.TestCase):
             self.assertEqual(any("gcf." in k for k in other_state), variant == "gcf")
             del other
 
+    def test_gcf_decoder_encoder_state_keys_are_shared_aliases(self):
+        model = build_model("gcf", shared_seed=41)
+        self.assertIs(model.denoise_model.encoder,
+                      model.denoise_model.decoder.encoder)
+        state = model.state_dict()
+        for suffix in ("gamma", "gate_conv.weight", "time_projection.bias"):
+            encoder_key = "denoise_model.encoder.gcf." + suffix
+            decoder_alias_key = "denoise_model.decoder.encoder.gcf." + suffix
+            self.assertIn(encoder_key, state)
+            self.assertIn(decoder_alias_key, state)
+            torch.testing.assert_close(
+                state[encoder_key], state[decoder_alias_key], rtol=0, atol=0)
+
     def test_split_hashes_and_overlap_guard(self):
         hashes = split_hashes(self.root, None)
         self.assertEqual(set(hashes), {"train", "val", "test"})
