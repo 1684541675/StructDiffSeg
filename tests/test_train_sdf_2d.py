@@ -157,6 +157,20 @@ class TestTrainSDF2D(unittest.TestCase):
                                 weights_only=False)
         self.assertEqual(checkpoint["epoch"], 3)
 
+    def test_gcf_single_uncertainty_sample_still_trains(self):
+        args = self.args(
+            "--variant", "gcf", "--uncer-samples", "1",
+            "--output-dir", str(self.root / "fast_gcf")
+        )
+        result = run(args)
+        self.assertEqual(result["mode"], "overfit")
+        log = json.loads(
+            (self.root / "fast_gcf" / "history.jsonl").read_text(encoding="utf-8")
+        )
+        self.assertTrue(log["did_validate"])
+        self.assertTrue(np.isfinite(log["train_loss"]))
+        self.assertEqual(log["cases_evaluated"], 1)
+
     def test_fast_settings_validate_ranges(self):
         for setting in (
             ("--uncer-samples", "0"),
