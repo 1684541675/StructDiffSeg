@@ -83,8 +83,16 @@ class TestCheckpointPreview(unittest.TestCase):
 
     def test_reject_changed_split_lists(self):
         checkpoint = self.make_checkpoint()
-        (self.root / "val.txt").write_text("te0\n", encoding="utf-8")
+        # Change only the list file's bytes; keep IDs unique and unchanged.
+        # This isolates the SHA-256 mismatch guard from the overlap guard.
+        (self.root / "val.txt").write_text("v0\n\n", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "differ"):
+            run_preview(checkpoint, data_path=self.root, device="cpu", limit=1)
+
+    def test_reject_overlapping_split_ids(self):
+        checkpoint = self.make_checkpoint()
+        (self.root / "val.txt").write_text("te0\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "Overlapping val/test"):
             run_preview(checkpoint, data_path=self.root, device="cpu", limit=1)
 
     def test_mask_error_color_semantics(self):
