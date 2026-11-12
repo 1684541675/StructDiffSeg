@@ -13,7 +13,7 @@ import numpy as np
 from PIL import Image
 import torch
 
-from preview_sdf_2d import error_image, run_preview, save_contact_sheet
+from preview_sdf_2d import run_preview, save_case_images
 from train_sdf_2d import build_model, split_hashes
 
 
@@ -50,18 +50,23 @@ class TestCheckpointPreview(unittest.TestCase):
         }, checkpoint)
         return checkpoint
 
-    def test_preview_two_train_images_saves_contact_sheets_and_metrics(self):
+    def test_preview_two_train_images_saves_separate_pngs_and_metrics(self):
         checkpoint = self.make_checkpoint()
         result = run_preview(checkpoint, data_path=self.root, device="cpu", limit=2)
         directory = Path(result["output_dir"])
         self.assertEqual(result["cases_evaluated"], 2)
         self.assertEqual(result["checkpoint_epoch"], 30)
         self.assertEqual(result["split"], "train")
-        self.assertEqual(len(list(directory.glob("*.png"))), 2)
-        for png in directory.glob("*.png"):
-            with Image.open(png) as im:
-                self.assertEqual(im.size, (192, 180))
-                self.assertEqual(im.mode, "RGB")
+        self.assertEqual(len(list(directory.glob("*.png"))), 6)
+        for case in ("000_tr0", "001_tr1"):
+            for suffix, mode in (("image", "RGB"), ("gt", "L"), ("pred", "L")):
+                png = directory / f"{case}_{suffix}.png"
+                self.assertTrue(png.is_file())
+                with Image.open(png) as im:
+                    self.assertEqual(im.size, (64, 64))
+                    self.assertEqual(im.mode, mode)
+                    if mode == "L":
+                        self.assertTrue(set(np.unique(np.array(im))).issubset({0, 255}))
         summary = json.loads((directory / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["checkpoint_training_mode"], "overfit")
         self.assertIn("NOT a test-set", summary["warning"])
@@ -69,6 +74,9 @@ class TestCheckpointPreview(unittest.TestCase):
         with (directory / "metrics.csv").open(encoding="utf-8-sig", newline="") as file:
             rows = list(csv.DictReader(file))
         self.assertEqual({row["case_name"] for row in rows}, {"tr0", "tr1"})
+        for row in rows:
+            for key in ("image_png", "gt_png", "prediction_png"):
+                self.assertTrue((directory / row[key]).is_file())
         with self.assertRaisesRegex(FileExistsError, "not empty"):
             run_preview(checkpoint, data_path=self.root, device="cpu", limit=2)
 
@@ -95,14 +103,23 @@ class TestCheckpointPreview(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Overlapping val/test"):
             run_preview(checkpoint, data_path=self.root, device="cpu", limit=1)
 
-    def test_mask_error_color_semantics(self):
+    def test_independent_image_and_binary_mask_png_content(self):
+        rgb = np.array([[[10, 30, 50], [20, 40, 60]],
+                        [[70, 90, 110], [120, 140, 160]]], dtype=np.uint8)
         gt = np.array([[0, 1], [1, 0]], dtype=bool)
         pred = np.array([[0, 1], [0, 1]], dtype=bool)
-        colors = error_image(gt, pred)
-        np.testing.assert_array_equal(colors[0, 0], [0, 0, 0])
-        np.testing.assert_array_equal(colors[0, 1], [30, 200, 50])
-        np.testing.assert_array_equal(colors[1, 0], [35, 105, 245])
-        np.testing.assert_array_equal(colors[1, 1], [250, 50, 50])
+        names = save_case_images(self.root, "sample", rgb, gt, pred)
+        self.assertEqual(set(names), {"image_png", "gt_png", "prediction_png"})
+        self.assertEqual(len(list(self.root.glob("sample*.png"))), 3)
+        with Image.open(self.root / names["image_png"]) as image:
+            self.assertEqual(image.mode, "RGB")
+            np.testing.assert_array_equal(np.array(image), rgb)
+        with Image.open(self.root / names["gt_png"]) as image:
+            self.assertEqual(image.mode, "L")
+            np.testing.assert_array_equal(np.array(image), gt.astype(np.uint8) * 255)
+        with Image.open(self.root / names["prediction_png"]) as image:
+            self.assertEqual(image.mode, "L")
+            np.testing.assert_array_equal(np.array(image), pred.astype(np.uint8) * 255)
 
 
 if __name__ == "__main__":
