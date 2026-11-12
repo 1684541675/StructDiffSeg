@@ -244,6 +244,8 @@ def validate_args(args):
         raise ValueError("size must be a multiple of 32 (at least 64)")
     if args.ddim_steps < 1 or args.overfit_samples < 1:
         raise ValueError("ddim_steps and overfit_samples must be positive")
+    if args.val_interval < 1 or not 1 <= args.uncer_samples <= 3:
+        raise ValueError("val_interval must be >= 1; uncer_samples must be 1..3")
     if not 0 <= args.seed < 2 ** 32:
         raise ValueError("seed must fit uint32")
     if not math.isfinite(args.lambda_sdf) or args.lambda_sdf < 0:
@@ -261,7 +263,7 @@ def validate_args(args):
 
 
 def experiment_config(args, split_sha):
-    return {
+    config = {
         "dataset": args.dataset,
         "data_path": str(Path(args.data_path).resolve()),
         "list_dir": str(Path(args.list_dir).resolve()) if args.list_dir else None,
@@ -279,6 +281,13 @@ def experiment_config(args, split_sha):
         "lambda_sdf": args.lambda_sdf if args.variant != "baseline" else 0.0,
         "sdf_radius": args.sdf_radius if args.variant != "baseline" else None,
     }
+    # Omit default keys for backward-compatible resume of older checkpoints.
+    # Nondefault settings form a distinct experiment (do not silently mix runs).
+    if args.val_interval != 1:
+        config["val_interval"] = args.val_interval
+    if args.uncer_samples != 3:
+        config["uncer_samples"] = args.uncer_samples
+    return config
 
 
 def run(args):
@@ -294,6 +303,9 @@ def run(args):
     train_loader, eval_loader = make_loaders(args)
     device = torch.device(args.device)
     model = build_model(args.variant, args.ddim_steps, shared_seed=args.seed).to(device)
+    # Only the training-time, no-grad Monte Carlo uncertainty pass changes.
+    # Model parameters, GCF/SDF blocks and DDIM prediction remain unchanged.
+    model.denoise_model.uncer_step = args.uncer_samples
     criterion = CeDiceLoss(2, [1, 1]).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr,
                                   weight_decay=args.weight_decay)
@@ -339,15 +351,30 @@ def run(args):
             losses.append(report["loss_total"])
         if not losses:
             raise ValueError("Empty training loader")
+        train_seconds = time.perf_counter() - start
         scheduler.step()
-        metrics = evaluate(model, eval_loader, device, seed=args.seed + 100000)
+        # Evaluate the first and final epochs, plus the requested cadence.
+        # Skipped epochs still save a resumable last.pt; only evaluated epochs
+        # can improve best.pt.
+        should_validate = (
+            epoch == 1 or epoch % args.val_interval == 0 or epoch == args.epochs
+        )
+        validate_start = time.perf_counter()
+        if should_validate:
+            metrics = evaluate(model, eval_loader, device, seed=args.seed + 100000)
+        else:
+            metrics = {"mean_dice": None, "mean_iou": None, "cases_evaluated": 0}
+        validation_seconds = time.perf_counter() - validate_start
         row = {
             "epoch": epoch, "train_loss": float(np.mean(losses)),
             "learning_rate": float(optimizer.param_groups[0]["lr"]),
             "elapsed_seconds": float(time.perf_counter() - start),
+            "train_seconds": float(train_seconds),
+            "validation_seconds": float(validation_seconds),
+            "did_validate": bool(should_validate),
             **metrics,
         }
-        improved = metrics["mean_dice"] > best_dice
+        improved = should_validate and metrics["mean_dice"] > best_dice
         if improved:
             best_dice = metrics["mean_dice"]
 
@@ -383,6 +410,10 @@ def make_parser():
     parser.add_argument("--size", type=int, default=256)
     parser.add_argument("--overfit-samples", type=int, default=2)
     parser.add_argument("--ddim-steps", type=int, default=3)
+    parser.add_argument("--val-interval", type=int, default=1,
+                        help="DDIM validation every N epochs plus first/final; default 1")
+    parser.add_argument("--uncer-samples", type=int, default=3,
+                        help="Training-time MC uncertainty samples (1..3); default 3")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=1e-2)
