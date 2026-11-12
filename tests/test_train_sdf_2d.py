@@ -128,6 +128,46 @@ class TestTrainSDF2D(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(json.loads(rows[0])["cases_evaluated"], 1)
 
+    def test_fast_local_settings_skip_intermediate_validation_and_log_timing(self):
+        args = self.args(
+            "--mode", "train", "--variant", "baseline", "--epochs", "3",
+            "--val-interval", "5", "--uncer-samples", "1",
+            "--output-dir", str(self.root / "fast_baseline")
+        )
+        result = run(args)
+        self.assertEqual(result["last_epoch"], 3)
+        output = self.root / "fast_baseline"
+        config = json.loads((output / "config.json").read_text(encoding="utf-8"))
+        self.assertEqual(config["val_interval"], 5)
+        self.assertEqual(config["uncer_samples"], 1)
+        rows = [
+            json.loads(line)
+            for line in (output / "history.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        self.assertEqual(len(rows), 3)
+        self.assertEqual([row["did_validate"] for row in rows], [True, False, True])
+        self.assertEqual([row["cases_evaluated"] for row in rows], [1, 0, 1])
+        self.assertIsNone(rows[1]["mean_dice"])
+        self.assertIsNone(rows[1]["mean_iou"])
+        self.assertEqual(rows[1]["validation_seconds"] >= 0, True)
+        self.assertTrue(all(row["train_seconds"] > 0 for row in rows))
+        self.assertTrue((output / "last.pt").is_file())
+        self.assertTrue((output / "best.pt").is_file())
+        checkpoint = torch.load(output / "last.pt", map_location="cpu",
+                                weights_only=False)
+        self.assertEqual(checkpoint["epoch"], 3)
+
+    def test_fast_settings_validate_ranges(self):
+        for setting in (
+            ("--uncer-samples", "0"),
+            ("--uncer-samples", "4"),
+            ("--val-interval", "0"),
+        ):
+            with self.subTest(setting=setting):
+                args = self.args(*setting)
+                with self.assertRaisesRegex(ValueError, "val_interval"):
+                    run(args)
+
     def test_overfit_run_saves_artifacts_and_resumes(self):
         args = self.args()
         report = run(args)
