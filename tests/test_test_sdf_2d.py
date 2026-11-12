@@ -97,13 +97,28 @@ class TestHeldOutEvaluation(unittest.TestCase):
         self.assertEqual(summary["cases_evaluated"], 2)
         self.assertIn("not instance challenge scores", summary["protocol_note"])
         self.assertIn("mean_hd95_px", summary)
-        self.assertEqual(summary["cases"], [
-            {k: (float(v) if k in ("dice", "iou") else
-                 None if k == "hd95_px" and v is None else v)
-             for k, v in rec.items()} for rec in summary["cases"]
-        ])
+        self.assertEqual(
+            summary["hd95_defined_cases"] + summary["hd95_undefined_cases"], 2
+        )
+        self.assertAlmostEqual(
+            summary["mean_dice"],
+            sum(float(row["dice"]) for row in rows) / len(rows)
+        )
+        self.assertEqual(
+            [case["case_name"] for case in summary["cases"]], ["te0", "te1"]
+        )
         with self.assertRaisesRegex(FileExistsError, "not empty"):
             run_test(checkpoint, data_path=self.root, device="cpu")
+
+    def test_gcf_checkpoint_inference_on_test_split(self):
+        checkpoint = self.checkpoint(variant="gcf")
+        result = run_test(checkpoint, data_path=self.root, device="cpu")
+        summary = json.loads(
+            (Path(result["output_dir"]) / "summary.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(summary["variant"], "gcf")
+        self.assertEqual(summary["cases_evaluated"], 2)
+        self.assertEqual(len(list(Path(result["output_dir"]).glob("*_pred.png"))), 2)
 
     def test_reject_overfit_checkpoint(self):
         checkpoint = self.checkpoint(mode="overfit")
