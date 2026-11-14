@@ -3,6 +3,7 @@
   python -m unittest discover -s tests -p "test_pmrnet_2d.py" -v
 """
 import csv
+import importlib.util
 import json
 import tempfile
 import unittest
@@ -13,9 +14,22 @@ from PIL import Image
 import torch
 
 from models.PMRNet.pmrnet import PMRNet
-from test_pmrnet_2d import run_test
 from train_pmrnet_2d import make_parser, run
 from train_sdf_2d import split_hashes
+
+
+# unittest discovers this file as module 'test_pmrnet_2d'. The CLI script in
+# the repository root has the same basename, so a regular import would import
+# this partially initialized test module instead. Load the CLI under a distinct
+# module name to exercise its real run_test function without changing the
+# public command 'python test_pmrnet_2d.py'.
+_eval_file = Path(__file__).resolve().parents[1] / "test_pmrnet_2d.py"
+_spec = importlib.util.spec_from_file_location("_pmrnet_eval_entrypoint", _eval_file)
+if _spec is None or _spec.loader is None:
+    raise ImportError(f"Cannot load PMRNet evaluation script: {_eval_file}")
+_eval_module = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_eval_module)
+run_test = _eval_module.run_test
 
 
 class TestPMRNetIntegration(unittest.TestCase):
