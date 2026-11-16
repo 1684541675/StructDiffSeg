@@ -28,7 +28,7 @@ class _ConfigNode(dict):
 def make_spm5121_config(image_size):
     image_size = int(image_size)
     if image_size < 64 or image_size % 16:
-        raise ValueError("SPM5121 image size must be >=64 and divisible by 16")
+        raise ValueError("SPM5121 image size must be at least 64 and divisible by 16")
     grid = image_size // 16
     n_patches = grid * grid
     num_heads = 8
