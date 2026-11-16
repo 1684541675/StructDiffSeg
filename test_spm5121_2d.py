@@ -1,4 +1,4 @@
-"""Evaluate a conventional U-Net checkpoint on the complete held-out test split.
+"""Evaluate an SPM5121 checkpoint on the complete held-out test split.
 
 Requires a validation-selected best.pt produced by train_spm5121_2d.py in
 --mode train. Does not train or choose model weights. Uses the exact same
@@ -69,7 +69,7 @@ def run_test(checkpoint, *, data_path=None, device="cuda", output_dir=None):
         batch = dataset[i]
         image = batch["image"].unsqueeze(0).to(device=device, dtype=torch.float32)
         label = batch["label"].unsqueeze(0)
-        logits = model(image)  # U-Net is deterministic: no DDIM or GT input.
+        logits = model(image)  # SPM5121 is deterministic: no DDIM or GT input.
         if logits.shape != (1, 2, *image.shape[2:]):
             raise ValueError("Unexpected SPM5121 output shape")
         pred_tensor = logits.argmax(dim=1).cpu()
