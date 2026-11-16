@@ -1,8 +1,8 @@
-"""Independent training for a conventional 2D U-Net segmentation baseline.
+"""Independent training for the existing SPM5121 shape-prior segmentation model.
 
 Uses the existing GlaS/CVC RGB binary loader and the same CE+Dice criterion
-as PMRNet and DiffSPM5121. No diffusion or SDF is involved. The existing SPM5121 architecture uses a ResNetV2 encoder and shape-prior
-modules. Its attention requires (image_size/16)^2 to be divisible by 8.
+as the other comparison models. The original SPM5121 model files are not
+modified. Its attention requires (image_size/16)^2 to be divisible by 8.
 
   python train_spm5121_2d.py --dataset cvc --data-path "D:/code/Python/MedSeg/cvc" \
       --mode train --epochs 100 --size 64 --batch-size 4 --device cuda \
@@ -45,8 +45,6 @@ def make_parser():
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--size", type=int, default=256)
-    parser.add_argument("--base-channels", type=int, default=32,
-                        help="U-Net stem width (32 default for MX350; 64 for wider U-Net)")
     parser.add_argument("--overfit-samples", type=int, default=2)
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--val-interval", type=int, default=1)
@@ -90,6 +88,9 @@ def get_config(args, hashes):
         "epochs": args.epochs,
         "batch_size": args.batch_size,
         "size": args.size,
+        "spm_patch_size": 16,
+        "spm_num_heads": 8,
+        "spm_hidden_size": 768,
         "overfit_samples": args.overfit_samples,
         "num_workers": args.num_workers,
         "val_interval": args.val_interval,
