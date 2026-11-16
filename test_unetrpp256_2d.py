@@ -6,7 +6,7 @@ binary Dice, IoU and resized-pixel HD95 definitions as test_sdf_2d.py.
 Saves independent RGB input, ground-truth mask, prediction mask PNGs per case.
 
 Example:
-  python test_unetrpp256_2d.py --checkpoint runs/cvc_unetrpp256_64_bs4/best.pt \
+  python test_unetrpp256_2d.py --checkpoint runs/cvc_unetrpp256_64_bs1/best.pt \
       --data-path "D:/code/Python/MedSeg/cvc" --device cuda
 
 Load only checkpoints produced by trusted local runs (torch.load with
