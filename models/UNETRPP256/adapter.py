@@ -18,7 +18,7 @@ try:
     )
 except ModuleNotFoundError as exc:
     required = {"monai", "timm", "einops", "batchgenerators", "scipy"}
-    if exc.name in required:
+    if exc.name and exc.name.split(".")[0] in required:
         raise ModuleNotFoundError(
             "UNETRPP256 requires the existing environment dependencies "
             "monai, timm, einops, batchgenerators and scipy. "
