@@ -5,8 +5,8 @@ as the other comparison models. The original SPM5121 model files are not
 modified. Its attention requires (image_size/16)^2 to be divisible by 8.
 
   python train_spm5121_2d.py --dataset cvc --data-path "D:/code/Python/MedSeg/cvc" \
-      --mode train --epochs 100 --size 64 --batch-size 4 --device cuda \
-      --output-dir runs/cvc_spm5121_64_bs4
+      --mode train --epochs 100 --size 64 --batch-size 1 --device cuda \
+      --output-dir runs/cvc_spm5121_64_bs1
 
   python train_spm5121_2d.py --dataset glas --data-path "D:/code/Python/MedSeg/glas" \
       --mode train --epochs 100 --size 64 --batch-size 1 --device cuda \
