@@ -10,7 +10,7 @@ modified. Its attention requires (image_size/16)^2 to be divisible by 8.
 
   python train_spm5121_2d.py --dataset glas --data-path "D:/code/Python/MedSeg/glas" \
       --mode train --epochs 100 --size 64 --batch-size 1 --device cuda \
-      --output-dir runs/glas_spm5121_256
+      --output-dir runs/glas_spm5121_64
 
 The default run validates every epoch; best.pt is selected by mean validation
 foreground Dice. Overfit mode is only for a training-subset smoke check.
