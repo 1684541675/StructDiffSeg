@@ -1,12 +1,12 @@
 """Independent training for the existing 2D UNETR++ comparison model.
 
 Uses the existing GlaS/CVC RGB binary loader and the same CE+Dice criterion
-as PMRNet and DiffUNETRPP256. No diffusion or SDF is involved. The model has
-4 downsampling stages and a configurable initial number of feature channels.
+as the other comparison models. No diffusion or SDF is involved. The original
+UNETR++ architecture settings are retained.
 
   python train_unetrpp256_2d.py --dataset cvc --data-path "D:/code/Python/MedSeg/cvc" \
-      --mode train --epochs 100 --size 64 --batch-size 4 --device cuda \
-      --output-dir runs/cvc_unetrpp256_64_bs4
+      --mode train --epochs 100 --size 64 --batch-size 1 --device cuda \
+      --output-dir runs/cvc_unetrpp256_64_bs1
 
   python train_unetrpp256_2d.py --dataset glas --data-path "D:/code/Python/MedSeg/glas" \
       --mode train --epochs 100 --size 256 --batch-size 1 --device cuda \
