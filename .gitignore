@@ -25,3 +25,6 @@ results/vmunet_*/
 # audit experiment outputs
 results/*.log
 results/*.patch
+
+# Generated training logs
+results/**/*.log
