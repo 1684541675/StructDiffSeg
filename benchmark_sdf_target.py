@@ -222,8 +222,7 @@ def main(argv=None):
         target = Path(args.output_json)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(
-            json.dumps(result, indent=2, ensure_ascii=False) + "
-",
+            json.dumps(result, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8"
         )
     return result
